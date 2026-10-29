@@ -19705,7 +19705,7 @@ auto/text_801909F4.cpp:
 	extabindex  start:0x8002174C end:0x80021758
 	.text       start:0x801909F4 end:0x80190A24
 
-auto/text_80190A24.c:
+auto/text_80190A24.cpp:
 	extab       start:0x8000F130 end:0x8000F138
 	extabindex  start:0x80021758 end:0x80021764
 	.text       start:0x80190A24 end:0x80190C48
