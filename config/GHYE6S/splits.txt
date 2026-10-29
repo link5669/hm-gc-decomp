@@ -12748,7 +12748,7 @@ auto/text_80127940.c:
 	extabindex  start:0x8001DE1C end:0x8001DE28
 	.text       start:0x80127940 end:0x80127D2C
 
-auto/text_80127D2C.c:
+auto/text_80127D2C.cpp:
 	extab       start:0x8000B684 end:0x8000B68C
 	extabindex  start:0x8001DE28 end:0x8001DE34
 	.text       start:0x80127D2C end:0x80127F34
