@@ -35335,7 +35335,7 @@ auto/text_80254030.cpp:
 auto/text_802540E0.c:
 	.text       start:0x802540E0 end:0x802540E4
 
-auto/text_802540E4.c:
+auto/text_802540E4.cpp:
 	extab       start:0x80016CA0 end:0x80016CA8
 	extabindex  start:0x80029990 end:0x8002999C
 	.text       start:0x802540E4 end:0x802542E8
