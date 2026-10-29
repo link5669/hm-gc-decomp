@@ -9,7 +9,7 @@ extern u32 lbl_80364780;
 extern u32 lbl_80364784;
 void fn_800604C4(s32 code, s32 a, s32 b, s32 c);
 void fn_800F7EC0(void *heap);
-void *fn_800F7FC4(u32 size);
+void *__nwa__FUl(u32 size);
 void fn_800F7E98(void);
 
 #define ALLOC(field, size) \
@@ -17,7 +17,7 @@ void fn_800F7E98(void);
         fn_800604C4(-2, 0, 0, 0); \
     } \
     fn_800F7EC0(lbl_8035AD48); \
-    p[field] = (u32)fn_800F7FC4(size); \
+    p[field] = (u32)__nwa__FUl(size); \
     fn_800F7E98(); \
     if (p[field] == 0) { \
         fn_800604C4(-4, 0, 0, 0); \
@@ -34,7 +34,7 @@ extern "C" {
         fn_800604C4(-2, 0, 0, 0); \
     } \
     fn_800F7EC0(lbl_8035AD48); \
-    p[field] = (u32)fn_800F7FC4(size); \
+    p[field] = (u32)__nwa__FUl(size); \
     fn_800F7E98(); \
     if (p[field] == 0) { \
         fn_800604C4(-4, 0, 0, 0); \

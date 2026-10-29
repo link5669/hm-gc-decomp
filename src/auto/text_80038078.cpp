@@ -1,6 +1,7 @@
 // Code of main that had no source file yet: decomp.wtf gave it this one.
 // split_file divides it into the game's real files (file_status shows its range).
 #include "common.h"
+extern "C" {
 
 typedef struct Msg { u32 a, b, c, code, down, f, g; } Msg;
 typedef struct Obj { u8 pad[4]; void *o4; } Obj;
@@ -85,4 +86,6 @@ void fn_80038078(Pad *p) {
         p->cy = 0;
         p->sy = 4;
     }
+}
+
 }
