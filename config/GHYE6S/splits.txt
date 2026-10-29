@@ -5843,7 +5843,7 @@ auto/text_80096584.cpp:
 auto/text_800965F8.cpp:
 	.text       start:0x800965F8 end:0x80096710
 
-auto/text_80096710.c:
+auto/text_80096710.cpp:
 	extab       start:0x80008750 end:0x80008758
 	extabindex  start:0x8001AB4C end:0x8001AB58
 	.text       start:0x80096710 end:0x80096924
