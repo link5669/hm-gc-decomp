@@ -13396,7 +13396,7 @@ auto/text_80131BB8.cpp:
 auto/text_80131C18.cpp:
 	.text       start:0x80131C18 end:0x80131C58
 
-auto/text_80131C58.c:
+auto/text_80131C58.cpp:
 	extab       start:0x8000BC24 end:0x8000BC2C
 	extabindex  start:0x8001E344 end:0x8001E350
 	.text       start:0x80131C58 end:0x80131E80
