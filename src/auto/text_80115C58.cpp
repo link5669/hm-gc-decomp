@@ -1,6 +1,7 @@
 // Code of main that had no source file yet: decomp.wtf gave it this one.
 // split_file divides it into the game's real files (file_status shows its range).
 #include "common.h"
+extern "C" {
 
 typedef struct Ent { char name[20]; void *fn; void *obj; } Ent;
 typedef struct Reg { Ent ents[360]; u32 count; u8 pad[0x277c-0x2764]; u8 pool[0x28]; u32 ready; } Reg;
@@ -41,4 +42,6 @@ void fn_80115C58(Reg *r) {
     Add(r, lbl_80363A50, (void *)fn_801153CC);
     fn_800F8E38(r->pool, 2000);
     r->ready = 1;
+}
+
 }

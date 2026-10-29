@@ -21,6 +21,20 @@ void fn_80190C98(void *);
 static inline void *find(u8 *m, char *g, char *n) { if ((u32)g == 0 || !g[0]) return fn_800F9398(m + 144, n); return fn_800F9788(m + 168, g, n); }
 struct PP { P0 h; u8 pad[48 - 0x14]; char n48[8]; char n56[8]; };
 #pragma opt_loop_invariants off
+void __dt__9C801A4C14Fv(void);
+void fn_801A4664(void);
+void fn_801A466C(void);
+void fn_801A46D4(void);
+void fn_801A46D8(void);
+int fn_801A480C(PP *p, u8 *a, R *r, void *d);
+void fn_801A4AF4(void);
+void fn_801A4B54(void);
+void fn_801A4F54(void);
+void fn_801A4F58(void);
+void fn_801A517C(void);
+void fn_801A5180(void);
+void fn_801A5188(void);
+void *lbl_802EA390[15] = { 0, 0, (void *)__dt__9C801A4C14Fv, (void *)fn_801A4AF4, (void *)fn_801A480C, (void *)fn_801A466C, (void *)fn_801A5180, (void *)fn_801A517C, (void *)fn_801A4B54, (void *)fn_801A46D8, (void *)fn_801A5188, (void *)fn_801A4664, (void *)fn_801A4F58, (void *)fn_801A4F54, (void *)fn_801A46D4 };
 int fn_801A480C(PP *p, u8 *a, R *r, void *d) {
     u8 *g; u8 *q;
     V3 v64;

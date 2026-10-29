@@ -13,6 +13,10 @@ extern f32 lbl_80364FD8;
 extern f32 lbl_80364FDC;
 void fn_801C2BB0(void *, void *, f32);
 static inline void clr(u8 *p) { if (F(p,100,void**)) for (u32 i = 0; i < F(p,104,u32); i++) { if (!F(p,100,void**)[i]) break; F(p,100,void**)[i] = 0; } }
+void __dt__9C801C3FD0Fv(void);
+void fn_801C3DD8(void);
+void fn_801C3ECC(void);
+void *lbl_802EBD10[5] = { 0, 0, (void *)__dt__9C801C3FD0Fv, (void *)fn_801C3DD8, (void *)fn_801C3ECC };
 void fn_801C28C0(u8 *p, f32 dt) {
     u32 i;
     if (F(p,100,B**)) for (i = 0; i < F(p,104,u32); i++) if (F(p,100,B**)[i]) F(p,100,B**)[i]->v4();

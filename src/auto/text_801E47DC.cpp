@@ -18,6 +18,16 @@ void fn_800604C4(int, int, int, int);
 void fn_800F7EC0(void *);
 void fn_800F7E98(void);
 static inline void *find(u8 *m, char *g, char *n) { if ((u32)g == 0 || !g[0]) return fn_800F9398(m + 4, n); return fn_800F9788(m + 52, g, n); }
+void __dt__9C801E4C2CFv(void);
+void fn_801E47DC(u8 *p, R *r, int tok);
+void fn_801E4A94(void);
+void fn_801E4B2C(void);
+void fn_801EB698(void);
+void fn_801EB724(void);
+void fn_801EB728(void);
+void fn_801EB738(void);
+void fn_801EB764(void);
+void *__vt__9C801E4C2C[11] = { 0, 0, (void *)fn_801E47DC, (void *)fn_801EB698, (void *)__dt__9C801E4C2CFv, (void *)fn_801E4B2C, (void *)fn_801E4A94, (void *)fn_801EB724, (void *)fn_801EB764, (void *)fn_801EB738, (void *)fn_801EB728 };
 void fn_801E47DC(u8 *p, R *r, int tok) {
     char b16[8];
     char b8[8];

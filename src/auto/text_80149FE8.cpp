@@ -22,6 +22,16 @@ void fn_80148288(u8 *, u32, u32, u32, u32, u32, u32);
 extern "C" {
 
 #define BE32(b) ((b)[3] + ((b)[2] << 8) + ((b)[1] << 16) + ((b)[0] << 24))
+void __dt__9C80134B10Fv(void);
+void fn_80148818(void);
+void fn_80149C60(void);
+void fn_80149C68(void);
+void fn_80149DA0(void);
+void fn_80149DAC(void);
+void fn_80149FE8(u8 *p);
+void fn_8014A320(void);
+void fn_8014A37C(void);
+void *__vt__9C80134B10[11] = { 0, 0, (void *)fn_80149FE8, (void *)__dt__9C80134B10Fv, (void *)fn_80148818, (void *)fn_8014A37C, (void *)fn_8014A320, (void *)fn_80149DAC, (void *)fn_80149DA0, (void *)fn_80149C68, (void *)fn_80149C60 };
 void fn_80149FE8(u8 *p) {
     u8 *b;
     u32 len;
