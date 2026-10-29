@@ -1,16 +1,16 @@
 #include "common.h"
 
-// Uses the renamed symbol dtor_802330B0 -> __dt__9C80233124Fv (dtor of the class whose ctor is fn_80233124).
+// Uses the renamed symbol dtor_802330B0 -> __dt__9C80233124Fv (dtor of the class whose ctor is __ct__9C80233124Fv).
 
 extern "C" {
 extern u8 lbl_802BCCA8[];
 extern volatile f32 lbl_8035E4A8;
 extern f32 lbl_8035E4CC;
-void fn_80233124(void *);
+void __ct__9C80233124Fv(void *);
 }
 
 struct C80233124 {
-    C80233124() { fn_80233124(this); }
+    C80233124() { __ct__9C80233124Fv(this); }
     ~C80233124();
 };
 

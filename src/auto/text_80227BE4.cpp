@@ -5,10 +5,10 @@
 extern "C" {
 
 extern u8 lbl_802F0FDC[];
-void fn_80233124(void);
+void __ct__9C80233124Fv(void);
 
 u32 * __ct__9C80227BE4Fv(u32 *param_1) {
-    fn_80233124();
+    __ct__9C80233124Fv();
     *param_1 = (u32)lbl_802F0FDC;
     return param_1;
 }

@@ -13,7 +13,7 @@ void __dt__9C800604C4Fv(int, int);
 void __dt__9C8025E920Fv(int, int);
 struct VCall_fn_8025E534_0 { virtual void p0(); virtual void p1(); virtual void p2(); virtual void m(); };
 
-s32 * fn_8025E534(s32 *param_1, s16 param_2) {
+s32 * __dt__9C8025E5B4Fv(s32 *param_1, s16 param_2) {
     if (param_1 != (s32 *)0x0) {
         *param_1 = (s32)lbl_802F29A0;
         ((VCall_fn_8025E534_0 *)(param_1))->m();

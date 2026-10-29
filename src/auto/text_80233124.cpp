@@ -9,7 +9,7 @@ extern volatile f32 lbl_80365DF8;
 extern volatile f32 lbl_80365E48;
 void __ct__9C80239B40Fv(void *);
 
-void *fn_80233124(u8 *p) {
+void *__ct__9C80233124Fv(u8 *p) {
     __ct__9C80239B40Fv(p);
     *(void * *)(p + 0) = lbl_802F16C0;
     *(s32 *)(p + 620) = 0;

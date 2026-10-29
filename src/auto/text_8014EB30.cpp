@@ -74,14 +74,36 @@ u32 fn_8014EB54(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out) 
     return code | (((0x3F800000 - z) >> 30) & 2);
 }
 
-u32 fn_8014EC90(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out, f32 *ndc) {
+/* QV=2.0p1 */
+static inline void MtxMultVec4_8014EC90(const f32 (*m)[4], const f32 *v, f32 *out) {
+    out[0] = v[0] * m[0][0];
+    out[1] = v[0] * m[1][0];
+    out[2] = v[0] * m[2][0];
+    out[3] = v[0] * m[3][0];
+    out[0] = v[1] * m[0][1] + out[0];
+    out[1] = v[1] * m[1][1] + out[1];
+    out[2] = v[1] * m[2][1] + out[2];
+    out[3] = v[1] * m[3][1] + out[3];
+    out[0] = v[2] * m[0][2] + out[0];
+    out[1] = v[2] * m[1][2] + out[1];
+    out[2] = v[2] * m[2][2] + out[2];
+    out[3] = v[2] * m[3][2] + out[3];
+    out[0] = out[0] + m[0][3];
+    out[1] = out[1] + m[1][3];
+    out[2] = out[2] + m[2][3];
+    out[3] = out[3] + m[3][3];
+}
+
+#pragma opt_propagation off
+u32 fn_8014EC90(const f32 (*m)[4], const f32 *v, f32 *out, f32 *ndc) {
     extern u32 lbl_80364538;
     extern f32 lbl_8036453C;
     u32 x, y, z, w;
     u32 code;
+    u32 t;
     f32 inv;
 
-    MtxMultVec4(m, v, out);
+    MtxMultVec4_8014EC90(m, v, out);
     inv = lbl_8036453C / out[3];
     x = ((u32 *)out)[0];
     y = ((u32 *)out)[1];
@@ -104,7 +126,8 @@ u32 fn_8014EC90(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out, 
         code |= ((w - y) >> 26) & 0x20;
     }
     if (z & 0x80000000) {
-        code |= lbl_80364538;
+        t = lbl_80364538;
+        code |= t;
     } else {
         code |= ((w - z) >> 30) & 2;
     }
@@ -113,6 +136,7 @@ u32 fn_8014EC90(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out, 
     ndc[2] = out[2] * inv;
     return code;
 }
+#pragma opt_propagation reset
 
 
 u32 fn_8014EF58(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out, f32 *ndc) {

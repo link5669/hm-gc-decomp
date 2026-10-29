@@ -10,7 +10,7 @@ extern void *lbl_8035B320;
 void fn_800604C4(s32, s32, s32, s32);
 void fn_800F7EC0(void *);
 void fn_800F7E98(void);
-void fn_80233124(void *);
+void __ct__9C80233124Fv(void *);
 } /* extern "C" */
 
 struct C80227BE4 {
@@ -23,7 +23,7 @@ struct C80227C20 {
     u8 *vt;
     u8 pad[720];
     C80227C20() {
-        fn_80233124(this);
+        __ct__9C80233124Fv(this);
         vt = lbl_802F0FDC;
     }
 };

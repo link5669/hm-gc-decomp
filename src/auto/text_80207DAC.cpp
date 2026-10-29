@@ -1,34 +1,27 @@
 // Code of main that had no source file yet: decomp.wtf gave it this one.
-// split_file divides it into the game's real files (file_status shows its range).
 #include "common.h"
 
 extern "C" {
 
-void strcat(int, int);
-void strcpy(int, int);
-s32 strlen(int);
+/* QV=2.0p1 */
+struct T_80207DAC { char name[664]; char names[8][128]; s32 n; };
+u32 strlen(const char *);
+char *strcpy(char *, const char *);
+char *strcat(char *, const char *);
 
-u32 fn_80207DAC(s8 *param_1, u32 param_2, u32 param_3) {
-    u32 sVar1;
-    u32 sVar2;
-    u32 uVar3;
-
-    sVar1 = strlen((int)(param_1));
-    if (*(s32 *)(param_1 + 0x698) != -1) {
-        sVar2 = strlen((int)(param_1 + *(s32 *)(param_1 + 0x698) * 0x80 + 0x298));
-        sVar1 = sVar1 + sVar2;
+BOOL fn_80207DAC(T_80207DAC *p, char *d, u32 max) {
+    u32 n = strlen(p->name);
+    if (p->n != -1) {
+        n += strlen(p->names[p->n]);
     }
-    if (sVar1 >= param_3) {
-        uVar3 = 0;
+    if (n >= max) {
+        return FALSE;
     }
-    else {
-        strcpy((int)(param_2), (int)(param_1));
-        if (*(s32 *)(param_1 + 0x698) != -1) {
-            strcat((int)(param_2), (int)(param_1 + *(s32 *)(param_1 + 0x698) * 0x80 + 0x298));
-        }
-        uVar3 = 1;
+    strcpy(d, p->name);
+    if (p->n != -1) {
+        strcat(d, p->names[p->n]);
     }
-    return uVar3;
+    return TRUE;
 }
 
 } /* extern "C" */

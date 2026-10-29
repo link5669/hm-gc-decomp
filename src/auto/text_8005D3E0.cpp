@@ -6,10 +6,10 @@ extern "C" {
 
 extern u8 lbl_802BCC00[];
 extern f32 lbl_8035E438;
-void fn_80233124(void *);
+void __ct__9C80233124Fv(void *);
 
-void *fn_8005D3E0(u8 *p) {
-    fn_80233124(p);
+void *__ct__9C8005D3E0Fv(u8 *p) {
+    __ct__9C80233124Fv(p);
     *(void * *)(p + 0) = lbl_802BCC00;
     *(s32 *)(p + 772) = 0;
     *(s32 *)(p + 776) = 0;

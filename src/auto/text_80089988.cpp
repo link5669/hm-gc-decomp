@@ -12,7 +12,7 @@ void __dt__9C8005F938Fv(int, int);
 void __dl__FPv(int);
 struct VCall_fn_80089988_0 { virtual void p0(); virtual void p1(); virtual void p2(); virtual void m(); };
 
-s32 * fn_80089988(s32 *param_1, s16 param_2) {
+s32 * __dt__9C800899FCFv(s32 *param_1, s16 param_2) {
     if (param_1 != (s32 *)0x0) {
         *param_1 = (s32)lbl_802C57F0;
         ((VCall_fn_80089988_0 *)(param_1))->m();

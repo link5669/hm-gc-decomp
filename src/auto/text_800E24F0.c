@@ -56,3 +56,18 @@ asm s32 fn_800E2520(void *a, void *b) {
     li r3, 0
     blr
 }
+
+asm void __ptmf_scall(void) {
+    nofralloc
+    lwz r0, 0(r12)
+    lwz r11, 4(r12)
+    lwz r12, 8(r12)
+    add r3, r3, r0
+    cmpwi r11, 0
+    blt loc_0x20
+    lwzx r12, r3, r12
+    lwzx r12, r12, r11
+loc_0x20:
+    mtctr r12
+    bctr
+}

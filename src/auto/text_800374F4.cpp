@@ -9,7 +9,7 @@ extern u8 lbl_802AFAF0[];
 extern volatile f32 lbl_8035BE98;
 void __ct__9C800665E0Fv(void *);
 
-void *fn_800374F4(u8 *p) {
+void *__ct__9C800374F4Fv(u8 *p) {
     __ct__9C800665E0Fv(p);
     *(void * *)(p + 0) = lbl_802AFB98;
     *(f32 *)(p + 364) = lbl_8035BE98;
