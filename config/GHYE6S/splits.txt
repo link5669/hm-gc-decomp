@@ -28627,7 +28627,7 @@ auto/text_80201F10.cpp:
 auto/text_80201F5C.c:
 	.text       start:0x80201F5C end:0x80201F68
 
-auto/text_80201F68.c:
+auto/text_80201F68.cpp:
 	extab       start:0x80013610 end:0x80013618
 	extabindex  start:0x800261BC end:0x800261C8
 	.text       start:0x80201F68 end:0x802021A8
