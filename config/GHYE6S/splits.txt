@@ -7653,7 +7653,7 @@ auto/text_800B2538.cpp:
 	extabindex  start:0x8001B9F8 end:0x8001BA04
 	.text       start:0x800B2538 end:0x800B266C
 
-auto/text_800B266C.c:
+auto/text_800B266C.cpp:
 	extab       start:0x800095FC end:0x80009604
 	extabindex  start:0x8001BA04 end:0x8001BA10
 	.text       start:0x800B266C end:0x800B2928
