@@ -2,6 +2,8 @@
 // split_file divides it into the game's real files (file_status shows its range).
 #include "common.h"
 
+extern "C" {
+
 extern const char lbl_80364440[8];
 extern const char lbl_8036444C[5];
 extern char lbl_802A0030[], lbl_802A0040[], lbl_802A0054[], lbl_802A007C[], lbl_802A0094[], lbl_802A00B8[], lbl_802A00D8[];
@@ -12,6 +14,13 @@ void fn_801486B4(u8 *, char *);
 void fn_80148210(u8 *, u32, u32, u32, u32);
 void fn_8014824C(u8 *, u32, u32, u32, u32);
 void fn_80148288(u8 *, u32, u32, u32, u32, u32, u32);
+#define BE32(b) ((b)[3] + ((b)[2] << 8) + ((b)[1] << 16) + ((b)[0] << 24))
+
+// Code of main that had no source file yet: decomp.wtf gave it this one.
+// split_file divides it into the game's real files (file_status shows its range).
+#include "common.h"
+extern "C" {
+
 #define BE32(b) ((b)[3] + ((b)[2] << 8) + ((b)[1] << 16) + ((b)[0] << 24))
 void fn_80149FE8(u8 *p) {
     u8 *b;
@@ -58,3 +67,7 @@ void fn_80149FE8(u8 *p) {
     *(u32 *)(p + 1344) = *(u32 *)(*(u8 **)(p + 52) + 4) - 33;
     *(u32 *)(p + 1352) = 33;
 }
+
+}
+
+} /* extern "C" */
