@@ -1946,7 +1946,7 @@ auto/text_8004B61C.cpp:
 	extabindex  start:0x80018ADC end:0x80018AE8
 	.text       start:0x8004B61C end:0x8004B6B8
 
-auto/text_8004B6B8.c:
+auto/text_8004B6B8.cpp:
 	extab       start:0x800064E4 end:0x800064EC
 	extabindex  start:0x80018AE8 end:0x80018AF4
 	.text       start:0x8004B6B8 end:0x8004B930
