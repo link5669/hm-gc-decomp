@@ -2309,7 +2309,7 @@ auto/text_80051B50.c:
 	extabindex  start:0x80018DD0 end:0x80018DDC
 	.text       start:0x80051B50 end:0x80051C98
 
-auto/text_80051C98.c:
+auto/text_80051C98.cpp:
 	extab       start:0x80006798 end:0x800067A0
 	extabindex  start:0x80018DDC end:0x80018DE8
 	.text       start:0x80051C98 end:0x80051EB4
