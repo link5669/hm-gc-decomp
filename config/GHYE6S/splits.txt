@@ -30665,7 +30665,7 @@ auto/text_80216738.cpp:
 	extabindex  start:0x800272A8 end:0x800272B4
 	.text       start:0x80216738 end:0x80216844
 
-auto/text_80216844.c:
+auto/text_80216844.cpp:
 	extab       start:0x800145A4 end:0x800145AC
 	extabindex  start:0x800272B4 end:0x800272C0
 	.text       start:0x80216844 end:0x80216A70
