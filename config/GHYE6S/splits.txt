@@ -23284,7 +23284,7 @@ auto/text_801C12B0.cpp:
 auto/text_801C1758.cpp:
 	.text       start:0x801C1758 end:0x801C1774
 
-auto/text_801C1774.c:
+auto/text_801C1774.cpp:
 	extab       start:0x80010C54 end:0x80010C5C
 	extabindex  start:0x80023474 end:0x80023480
 	.text       start:0x801C1774 end:0x801C197C
