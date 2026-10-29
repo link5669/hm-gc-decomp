@@ -18930,7 +18930,7 @@ auto/text_80187498.cpp:
 auto/text_801874E0.c:
 	.text       start:0x801874E0 end:0x801874E8
 
-auto/text_801874E8.c:
+auto/text_801874E8.cpp:
 	extab       start:0x8000EAC8 end:0x8000EAD0
 	extabindex  start:0x800210C8 end:0x800210D4
 	.text       start:0x801874E8 end:0x8018771C
