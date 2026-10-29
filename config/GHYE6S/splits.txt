@@ -36477,7 +36477,7 @@ auto/text_8026A124.cpp:
 	.text       start:0x8026A124 end:0x8026A15C
 	.ctors      start:0x80294394 end:0x80294398
 
-auto/text_8026A15C.c:
+auto/text_8026A15C.cpp:
 	extab       start:0x80017688 end:0x800176B0
 	extabindex  start:0x8002A308 end:0x8002A314
 	.text       start:0x8026A15C end:0x8026A370
