@@ -3359,7 +3359,7 @@ auto/text_8006B6C8.cpp:
 	extabindex  start:0x800196B8 end:0x800196C4
 	.text       start:0x8006B6C8 end:0x8006B6F4
 
-auto/text_8006B6F4.c:
+auto/text_8006B6F4.cpp:
 	extab       start:0x80007354 end:0x8000735C
 	extabindex  start:0x800196C4 end:0x800196D0
 	.text       start:0x8006B6F4 end:0x8006B908
