@@ -34751,7 +34751,7 @@ auto/text_8024D778.cpp:
 auto/text_8024D7E4.c:
 	.text       start:0x8024D7E4 end:0x8024D814
 
-auto/text_8024D814.c:
+auto/text_8024D814.cpp:
 	extab       start:0x800165B4 end:0x800165EC
 	extabindex  start:0x800294E0 end:0x800294EC
 	.text       start:0x8024D814 end:0x8024DAE0
