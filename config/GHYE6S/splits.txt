@@ -27489,7 +27489,7 @@ auto/text_801F61D4.cpp:
 auto/text_801F6258.cpp:
 	.text       start:0x801F6258 end:0x801F6334
 
-auto/text_801F6334.c:
+auto/text_801F6334.cpp:
 	extab       start:0x80012B14 end:0x80012B2C
 	extabindex  start:0x8002585C end:0x80025868
 	.text       start:0x801F6334 end:0x801F6554
