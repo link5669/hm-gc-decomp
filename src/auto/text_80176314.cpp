@@ -2,6 +2,8 @@
 // split_file divides it into the game's real files (file_status shows its range).
 #include "common.h"
 
+extern "C" {
+
 extern u8 *lbl_8035AD48;
 extern u32 lbl_80364780;
 extern u32 lbl_80364784;
@@ -9,6 +11,23 @@ void fn_800604C4(s32 code, s32 a, s32 b, s32 c);
 void fn_800F7EC0(void *heap);
 void *fn_800F7FC4(u32 size);
 void fn_800F7E98(void);
+
+#define ALLOC(field, size) \
+    if (lbl_8035AD48 == 0) { \
+        fn_800604C4(-2, 0, 0, 0); \
+    } \
+    fn_800F7EC0(lbl_8035AD48); \
+    p[field] = (u32)fn_800F7FC4(size); \
+    fn_800F7E98(); \
+    if (p[field] == 0) { \
+        fn_800604C4(-4, 0, 0, 0); \
+    }
+
+// Code of main that had no source file yet: decomp.wtf gave it this one.
+// split_file divides it into the game's real files (file_status shows its range).
+#include "common.h"
+extern "C" {
+
 
 #define ALLOC(field, size) \
     if (lbl_8035AD48 == 0) { \
@@ -83,3 +102,7 @@ void fn_80176314(u32 *p) {
     p[1] |= lbl_80364784;
     *(u32 *)(lbl_8035AD48 + 0x1C) = *(u32 *)(lbl_8035AD48 + 0x18);
 }
+
+}
+
+} /* extern "C" */
