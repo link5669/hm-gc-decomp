@@ -34454,7 +34454,7 @@ auto/text_802495F0.cpp:
 	extabindex  start:0x80029258 end:0x80029264
 	.text       start:0x802495F0 end:0x8024973C
 
-auto/text_8024973C.c:
+auto/text_8024973C.cpp:
 	extab       start:0x800162F0 end:0x800162F8
 	extabindex  start:0x80029264 end:0x80029270
 	.text       start:0x8024973C end:0x80249960
