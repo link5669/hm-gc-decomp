@@ -34049,7 +34049,7 @@ auto/text_80243FD8.cpp:
 	extabindex  start:0x80028EEC end:0x80028EF8
 	.text       start:0x80243FD8 end:0x80244154
 
-auto/text_80244154.c:
+auto/text_80244154.cpp:
 	extab       start:0x80015F5C end:0x80015F98
 	extabindex  start:0x80028EF8 end:0x80028F04
 	.text       start:0x80244154 end:0x80244428
