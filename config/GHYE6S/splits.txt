@@ -1788,7 +1788,7 @@ auto/text_80047D30.cpp:
 	.text       start:0x80047D30 end:0x80047DA0
 	.ctors      start:0x80293F68 end:0x80293F6C
 
-auto/text_80047DA0.c:
+auto/text_80047DA0.cpp:
 	extab       start:0x800063D8 end:0x800063E0
 	extabindex  start:0x800189A4 end:0x800189B0
 	.text       start:0x80047DA0 end:0x800483EC
