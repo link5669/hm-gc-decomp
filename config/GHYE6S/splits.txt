@@ -32442,7 +32442,7 @@ auto/text_8022DB6C.cpp:
 	extabindex  start:0x80028184 end:0x80028190
 	.text       start:0x8022DB6C end:0x8022DBD8
 
-auto/text_8022DBD8.c:
+auto/text_8022DBD8.cpp:
 	extab       start:0x800152B4 end:0x800152BC
 	extabindex  start:0x80028190 end:0x8002819C
 	.text       start:0x8022DBD8 end:0x8022DE78
