@@ -11631,10 +11631,11 @@ auto/text_80116D04.cpp:
 auto/text_80116DC0.cpp:
 	.text       start:0x80116DC0 end:0x80116E1C
 
-auto/text_80116E1C.c:
+auto/text_80116E1C.cpp:
 	extab       start:0x8000AEF4 end:0x8000AEFC
 	extabindex  start:0x8001D504 end:0x8001D510
 	.text       start:0x80116E1C end:0x8011712C
+	.rodata     start:0x8029D290 end:0x8029D318
 
 auto/text_8011712C.cpp:
 	extab       start:0x8000AEFC end:0x8000AF04
