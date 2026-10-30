@@ -33106,7 +33106,7 @@ auto/text_80239E04.cpp:
 auto/text_8023A138.cpp:
 	.text       start:0x8023A138 end:0x8023A194
 
-auto/text_8023A194.c:
+auto/text_8023A194.cpp:
 	extab       start:0x80015970 end:0x80015978
 	extabindex  start:0x80028748 end:0x80028754
 	.text       start:0x8023A194 end:0x8023A444
