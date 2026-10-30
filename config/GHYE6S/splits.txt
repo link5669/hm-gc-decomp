@@ -2609,7 +2609,7 @@ auto/text_8005A128.cpp:
 	.text       start:0x8005A128 end:0x8005A19C
 	.ctors      start:0x80293F9C end:0x80293FA0
 
-auto/text_8005A19C.c:
+auto/text_8005A19C.cpp:
 	extab       start:0x800069F8 end:0x80006A00
 	extabindex  start:0x80019064 end:0x80019070
 	.text       start:0x8005A19C end:0x8005A6A4
