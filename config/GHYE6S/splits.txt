@@ -19782,7 +19782,7 @@ auto/text_80191EA8.cpp:
 	extabindex  start:0x800217E8 end:0x800217F4
 	.text       start:0x80191EA8 end:0x80191F88
 
-auto/text_80191F88.c:
+auto/text_80191F88.cpp:
 	extab       start:0x8000F198 end:0x8000F1C0
 	extabindex  start:0x800217F4 end:0x80021800
 	.text       start:0x80191F88 end:0x80192210
