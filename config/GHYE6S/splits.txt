@@ -36396,14 +36396,10 @@ auto/text_802680D8.cpp:
 	.text       start:0x802680D8 end:0x80268178
 
 auto/text_80268178.cpp:
-	.text       start:0x80268178 end:0x80268290
-	.data       start:0x802F3260 end:0x802F32E0
-
-auto/text_80268290.cpp:
 	extab       start:0x80017618 end:0x80017620
 	extabindex  start:0x8002A278 end:0x8002A284
-	.text       start:0x80268290 end:0x8026848C
-	.data       start:0x802F32E0 end:0x802F3320
+	.text       start:0x80268178 end:0x8026848C
+	.data       start:0x802F3260 end:0x802F3320
 
 auto/text_8026848C.cpp:
 	.text       start:0x8026848C end:0x80268504
