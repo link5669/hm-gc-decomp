@@ -17346,7 +17346,7 @@ auto/text_8016F10C.cpp:
 	extabindex  start:0x80020390 end:0x8002039C
 	.text       start:0x8016F10C end:0x8016F1B0
 
-auto/text_8016F1B0.c:
+auto/text_8016F1B0.cpp:
 	extab       start:0x8000DD18 end:0x8000DD20
 	extabindex  start:0x8002039C end:0x800203A8
 	.text       start:0x8016F1B0 end:0x8016F45C
