@@ -24403,7 +24403,7 @@ auto/text_801D3608.cpp:
 	extabindex  start:0x80023D8C end:0x80023D98
 	.text       start:0x801D3608 end:0x801D3634
 
-auto/text_801D3634.c:
+auto/text_801D3634.cpp:
 	extab       start:0x80011380 end:0x80011388
 	extabindex  start:0x80023D98 end:0x80023DA4
 	.text       start:0x801D3634 end:0x801D38B4
