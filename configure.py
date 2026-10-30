@@ -790,7 +790,7 @@ config.libs = [
             Object(Matching, "auto/text_8005F38C.cpp", extra_cflags=["-Cpp_exceptions on"], mw_version="GC/2.0p1"),
             Object(Matching, "auto/text_8005F54C.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_8005F59C.cpp", extra_cflags=["-Cpp_exceptions on"]),
-            Object(NonMatching, "auto/text_8005F620.cpp", extra_cflags=["-Cpp_exceptions on"]),
+            Object(Matching, "auto/text_8005F620.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_8005F938.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_8005FA14.cpp", extra_cflags=["-Cpp_exceptions on"], mw_version="GC/2.0p1", extab_padding=[0xB0, 0x02]),
             Object(Matching, "auto/text_8005FBEC.cpp", extra_cflags=["-Cpp_exceptions on"]),
