@@ -2475,7 +2475,7 @@ auto/text_80056B4C.cpp:
 	extabindex  start:0x80018F2C end:0x80018F38
 	.text       start:0x80056B4C end:0x80056D3C
 
-auto/text_80056D3C.c:
+auto/text_80056D3C.cpp:
 	extab       start:0x800068D8 end:0x800068E0
 	extabindex  start:0x80018F38 end:0x80018F44
 	.text       start:0x80056D3C end:0x80056FE0
