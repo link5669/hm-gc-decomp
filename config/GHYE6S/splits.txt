@@ -4567,7 +4567,7 @@ auto/text_8008522C.cpp:
 	extabindex  start:0x8001A0E4 end:0x8001A0F0
 	.text       start:0x8008522C end:0x8008553C
 
-auto/text_8008553C.c:
+auto/text_8008553C.cpp:
 	extab       start:0x80007CD0 end:0x80007CD8
 	extabindex  start:0x8001A0F0 end:0x8001A0FC
 	.text       start:0x8008553C end:0x800857F8
