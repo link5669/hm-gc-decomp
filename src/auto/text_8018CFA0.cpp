@@ -1,14 +1,20 @@
+#include "common.h"
+#pragma explicit_zero_data on
 // Code of main that had no source file yet: decomp.wtf gave it this one.
 // split_file divides it into the game's real files (file_status shows its range).
-#include "common.h"
+
+extern "C" {
+__declspec(section ".sdata2") u32 lbl_80364A90 = 2;
+__declspec(section ".sdata2") u32 lbl_80364A94 = 1;
+__declspec(section ".sdata2") u32 lbl_80364A98 = 4;
+__declspec(section ".sdata2") f32 lbl_80364A9C = 0.0f;
+}
 
 extern "C" {
 
 struct R { u8 pad_[292]; virtual void s0(); virtual void s1(); virtual void s2(); virtual void s3(); virtual void v4(int); virtual u32 v5(); };
 struct Q { u8 pad_[4]; virtual void s0(); virtual void v1(void*); };
 #define F(p,o,t) (*(t*)((u8*)(p)+(o)))
-extern f32 lbl_80364A9C;
-extern u32 lbl_80364A90, lbl_80364A94, lbl_80364A98;
 void fn_800FB064(R *, char *);
 void fn_800FB000(R *, int);
 void fn_800FAEF8(R *);
@@ -62,3 +68,4 @@ void fn_8018CFA0(u8 *p, u8 *lib, R *r) {
 #pragma opt_loop_invariants reset
 
 } /* extern "C" */
+

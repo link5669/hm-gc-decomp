@@ -1,19 +1,23 @@
+#include "common.h"
+#pragma explicit_zero_data on
 // Code of main that had no source file yet: decomp.wtf gave it this one.
 // split_file divides it into the game's real files (file_status shows its range).
-#include "common.h"
+
+extern "C" {
+__declspec(section ".sdata2") f32 lbl_80364A70 = 0.0f;
+__declspec(section ".sdata2") f32 lbl_80364A74 = 1.0f;
+__declspec(section ".sdata2") f64 lbl_80364A78 = 0.5;
+__declspec(section ".sdata2") f64 lbl_80364A80 = 3.0;
+}
 
 extern "C" {
 
-#include "common.h"
+
 extern "C" {
 struct Vec { f32 x, y, z; };
 struct Sph { Vec c; f32 r; };
 struct Edge { u8 pad[84]; Vec *v0; Vec *v1; u8 pad2[152 - 92]; };
 struct Mesh { u8 pad0[20]; s32 n; u32 flags; u8 pad3[4]; Sph s; u8 pad4[4]; Edge *edges; };
-extern f32 lbl_80364A70;
-extern f32 lbl_80364A74;
-extern f64 lbl_80364A78;
-extern f64 lbl_80364A80;
 f32 fn_8010155C(Vec *a, Vec *b);
 
 static inline void vadd(Vec *d, Vec *s) { d->x += s->x; d->y += s->y; d->z += s->z; }
@@ -65,3 +69,4 @@ void fn_8018BC44(Mesh *m, Sph *out) {
 }
 
 } /* extern "C" */
+
