@@ -6130,7 +6130,7 @@ config.libs = [
             Object(Matching, "auto/text_802140C8.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_802140F4.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_80214124.cpp", extra_cflags=["-Cpp_exceptions on"]),
-            Object(NonMatching, "auto/text_802141B0.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on"]),
+            Object(Matching, "auto/text_802141B0.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on"], extab_padding=[0xB1, 0x02]),
             Object(Matching, "auto/text_80214468.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_8021452C.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_802147DC.c"),
