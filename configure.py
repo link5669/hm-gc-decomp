@@ -1430,6 +1430,7 @@ config.libs = [
             Object(Matching, "auto/text_800A3494.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_800A34D8.cpp", extra_cflags=["-Cpp_exceptions on"], mw_version="GC/2.0p1", extab_padding=[0xB0, 0x02]),
             Object(Matching, "auto/text_800A3618.cpp", extra_cflags=["-Cpp_exceptions on"]),
+            Object(NonMatching, "auto/text_800A3688.cpp", extra_cflags=["-Cpp_exceptions on", "-str reuse,readonly"]),
             Object(Matching, "auto/text_800A3D18.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_800A3DA4.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(NonMatching, "auto/text_800A3E30.c"),
