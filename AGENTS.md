@@ -179,3 +179,5 @@ The decoded extab in `build/GHYE6S/asm/<unit>.s` says which C++ construct the or
 loops won't overlap. Pull often: both agents commit to `main`.
 
 The library-unit agent works in this repo too and commits its own batches. Commit only your own units: `git add` specific paths rather than `-A`. If a library unit shows up as modified in `git status`, leave it alone.
+
+**Absorbed units (2026-10-30):** `text_80268290` was merged into `text_80268178.cpp` (one TU, namespace-wrapped, with `-use_lmw_stmw on`; `fn_80268290` is in `force_active`). The `text_80268290` unit no longer exists.
