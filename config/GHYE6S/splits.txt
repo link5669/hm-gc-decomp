@@ -36423,7 +36423,7 @@ auto/text_80268A8C.cpp:
 	extabindex  start:0x8002A290 end:0x8002A29C
 	.text       start:0x80268A8C end:0x80268B08
 
-auto/text_80268B08.c:
+auto/text_80268B08.cpp:
 	extab       start:0x80017630 end:0x80017638
 	extabindex  start:0x8002A29C end:0x8002A2A8
 	.text       start:0x80268B08 end:0x80268DCC
