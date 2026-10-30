@@ -3073,7 +3073,7 @@ auto/text_800613CC.cpp:
 auto/text_80061458.c:
 	.text       start:0x80061458 end:0x80061484
 
-auto/text_80061484.c:
+auto/text_80061484.cpp:
 	extab       start:0x80006E1C end:0x80006E24
 	extabindex  start:0x80019454 end:0x80019460
 	.text       start:0x80061484 end:0x80061734
