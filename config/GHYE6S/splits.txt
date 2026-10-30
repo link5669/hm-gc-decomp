@@ -33633,7 +33633,7 @@ auto/text_8023F1DC.cpp:
 	.text       start:0x8023F1DC end:0x8023F214
 	.ctors      start:0x802942B0 end:0x802942B4
 
-auto/text_8023F214.c:
+auto/text_8023F214.cpp:
 	extab       start:0x80015CAC end:0x80015CB4
 	extabindex  start:0x80028B68 end:0x80028B74
 	.text       start:0x8023F214 end:0x8023F4A0
