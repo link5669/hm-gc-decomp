@@ -20494,7 +20494,7 @@ auto/text_8019D110.c:
 	extabindex  start:0x80021DF4 end:0x80021E00
 	.text       start:0x8019D110 end:0x8019D34C
 
-auto/text_8019D34C.c:
+auto/text_8019D34C.cpp:
 	extab       start:0x8000F7C0 end:0x8000F7C8
 	extabindex  start:0x80021E00 end:0x80021E0C
 	.text       start:0x8019D34C end:0x8019D5CC
