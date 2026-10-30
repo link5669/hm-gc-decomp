@@ -34608,7 +34608,7 @@ auto/text_8024B0AC.cpp:
 	.text       start:0x8024B0AC end:0x8024B2D8
 	.sdata2     start:0x80366380 end:0x80366388
 
-auto/text_8024B2D8.c:
+auto/text_8024B2D8.cpp:
 	extab       start:0x80016400 end:0x80016444
 	extabindex  start:0x800293A8 end:0x800293B4
 	.text       start:0x8024B2D8 end:0x8024B580
