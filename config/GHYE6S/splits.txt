@@ -6296,7 +6296,7 @@ auto/text_8009FB74.cpp:
 	extabindex  start:0x8001AEE8 end:0x8001AEF4
 	.text       start:0x8009FB74 end:0x8009FBC8
 
-auto/text_8009FBC8.c:
+auto/text_8009FBC8.cpp:
 	extab       start:0x80008BE8 end:0x80008BF0
 	extabindex  start:0x8001AEF4 end:0x8001AF00
 	.text       start:0x8009FBC8 end:0x8009FE20
