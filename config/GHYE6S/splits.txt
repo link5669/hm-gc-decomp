@@ -19206,7 +19206,7 @@ auto/text_8018AFA0.cpp:
 auto/text_8018AFD4.cpp:
 	.text       start:0x8018AFD4 end:0x8018AFF4
 
-auto/text_8018AFF4.c:
+auto/text_8018AFF4.cpp:
 	extab       start:0x8000ED14 end:0x8000ED1C
 	extabindex  start:0x80021320 end:0x8002132C
 	.text       start:0x8018AFF4 end:0x8018B2A0
