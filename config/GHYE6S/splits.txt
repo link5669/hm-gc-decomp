@@ -34808,7 +34808,7 @@ auto/text_8024EDB8.cpp:
 	extabindex  start:0x80029558 end:0x80029564
 	.text       start:0x8024EDB8 end:0x8024EECC
 
-auto/text_8024EECC.c:
+auto/text_8024EECC.cpp:
 	extab       start:0x8001679C end:0x800167A4
 	extabindex  start:0x80029564 end:0x80029570
 	.text       start:0x8024EECC end:0x8024F13C
