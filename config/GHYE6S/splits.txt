@@ -17740,7 +17740,7 @@ auto/text_80175C8C.cpp:
 	extabindex  start:0x800206D8 end:0x800206E4
 	.text       start:0x80175C8C end:0x80175D00
 
-auto/text_80175D00.c:
+auto/text_80175D00.cpp:
 	extab       start:0x8000DFA8 end:0x8000DFB0
 	extabindex  start:0x800206E4 end:0x800206F0
 	.text       start:0x80175D00 end:0x80175FA0
