@@ -6806,7 +6806,7 @@ auto/text_800A75B8.c:
 	extabindex  start:0x8001B32C end:0x8001B338
 	.text       start:0x800A75B8 end:0x800A77D0
 
-auto/text_800A77D0.c:
+auto/text_800A77D0.cpp:
 	extab       start:0x80008FC8 end:0x80008FD0
 	extabindex  start:0x8001B338 end:0x8001B344
 	.text       start:0x800A77D0 end:0x800A7A1C
