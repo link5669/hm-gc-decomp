@@ -14058,7 +14058,7 @@ auto/text_801397FC.c:
 auto/text_801399F4.cpp:
 	.text       start:0x801399F4 end:0x80139B38
 
-auto/text_80139B38.c:
+auto/text_80139B38.cpp:
 	extab       start:0x8000C154 end:0x8000C15C
 	extabindex  start:0x8001E86C end:0x8001E878
 	.text       start:0x80139B38 end:0x80139D34
