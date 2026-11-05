@@ -13,14 +13,13 @@ extern f32 lbl_80366954;
 void fn_800604C4(s32, s32, s32, s32);
 void fn_800F7EC0(void *);
 void fn_800F7E98(void);
-void __ct__9C80257738Fv(void *p);
 
 } /* extern "C" */
-struct C800604C4 { C800604C4() { __ct__9C80257738Fv(this); } ~C800604C4(); };
+struct C80257738 { C80257738(); ~C80257738(); };
 struct V802F29A0 { u8 *vt; V802F29A0() { vt = lbl_802F29A0; } };
 struct C8025E920 { C8025E920(); ~C8025E920(); };
 
-struct N_8025C444 : C800604C4 {
+struct N_8025C444 : C80257738 {
     V802F29A0 m0;
     u8 pad4[0xcc - 4];
     s32 mCC;

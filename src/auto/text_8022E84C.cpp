@@ -9,14 +9,14 @@ extern "C" {
 extern "C" {
 extern u8 lbl_802F13F4[];
 void __dl__FPv(int);
-void dtor_8022DF54(int, int);
+void __dt__9C8022DFC8Fv(int, int);
 struct VCall_fn_8022E84C_0 { virtual void p0(); virtual void p1(); virtual void p2(); virtual void m(); };
 
 s32 * __dt__9C8022E8C0Fv(s32 *param_1, s16 param_2) {
     if (param_1 != (s32 *)0x0) {
         *param_1 = (s32)lbl_802F13F4;
         ((VCall_fn_8022E84C_0 *)(param_1))->m();
-        dtor_8022DF54((int)(param_1), (int)(0));
+        __dt__9C8022DFC8Fv((int)(param_1), (int)(0));
         if (0 < param_2) {
             __dl__FPv((int)(param_1));
         }

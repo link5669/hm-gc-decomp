@@ -1,6 +1,6 @@
-// auto/text_80033BD0 dtor_80033BD0 98.2692
+// auto/text_80033BD0 __dt__9C80033BD0Fv 98.2692
 
-s32 dtor_80033BD0(s32 param_1, s16 param_2) {
+s32 __dt__9C80033BD0Fv(s32 param_1, s16 param_2) {
     if (param_1 != 0) {
         *(u8 **)(param_1 + 4) = (u8 *)lbl_802F069C;
         fn_80222BE8(param_1);

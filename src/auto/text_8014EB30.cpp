@@ -8,24 +8,6 @@ extern f32 lbl_80364544;
 extern f32 lbl_80364540;
 extern s32 lbl_8035ACB8;
 
-static inline void MtxMultVec4(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out) {
-    out[0] = v[0] * m[0][0];
-    out[1] = v[0] * m[1][0];
-    out[2] = v[0] * m[2][0];
-    out[3] = v[0] * m[3][0];
-    out[0] = v[1] * m[0][1] + out[0];
-    out[1] = v[1] * m[1][1] + out[1];
-    out[2] = v[1] * m[2][1] + out[2];
-    out[3] = v[1] * m[3][1] + out[3];
-    out[0] = v[2] * m[0][2] + out[0];
-    out[1] = v[2] * m[1][2] + out[1];
-    out[2] = v[2] * m[2][2] + out[2];
-    out[3] = v[2] * m[3][2] + out[3];
-    out[0] = out[0] + m[0][3];
-    out[1] = out[1] + m[1][3];
-    out[2] = out[2] + m[2][3];
-    out[3] = out[3] + m[3][3];
-}
 #pragma push
 #pragma optimization_level 1
 void fn_8014EB30(void **arg0) {
@@ -141,27 +123,76 @@ u32 fn_8014EC90(const f32 (*m)[4], const f32 *v, f32 *out, f32 *ndc) {
 }
 #pragma opt_propagation reset
 
-
-u32 fn_8014EF58(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out, f32 *ndc) {
-    extern f32 lbl_8036453C;
-    u32 x, y, z, w;
+/* QV=2.0p1 */
+u32 fn_8014EE48(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out) {
+    u32 x, y, z;
     u32 neg, over;
-    f32 inv;
 
-    MtxMultVec4(m, v, out);
+    out[0] = v[0] * m[0][0];
+    out[1] = v[0] * m[1][0];
+    out[2] = v[0] * m[2][0];
+    out[0] = v[1] * m[0][1] + out[0];
+    out[1] = v[1] * m[1][1] + out[1];
+    out[2] = v[1] * m[2][1] + out[2];
+    out[0] = v[2] * m[0][2] + out[0];
+    out[1] = v[2] * m[1][2] + out[1];
+    out[2] = v[2] * m[2][2] + out[2];
+    out[0] = out[0] + m[0][3];
+    out[1] = out[1] + m[1][3];
+    out[2] = out[2] + m[2][3];
     x = ((u32 *)out)[0];
     y = ((u32 *)out)[1];
     z = ((u32 *)out)[2];
+    neg = ((x >> 29) & 4);
+    over = (((0x3F800000 - x) >> 28) & 8);
+    neg |= ((y >> 27) & 16);
+    over |= (((0x3F800000 - y) >> 26) & 32);
+    neg |= (z >> 31);
+    over |= (((0x3F800000 - z) >> 30) & 2);
+    return neg | (over & ~(neg << 1));
+}
+
+/* QV=2.0p1 */
+static inline void MtxMultVec4(const f32 (*m)[4], const f32 *v, f32 *out) {
+    out[0] = v[0] * m[0][0];
+    out[1] = v[0] * m[1][0];
+    out[2] = v[0] * m[2][0];
+    out[3] = v[0] * m[3][0];
+    out[0] = v[1] * m[0][1] + out[0];
+    out[1] = v[1] * m[1][1] + out[1];
+    out[2] = v[1] * m[2][1] + out[2];
+    out[3] = v[1] * m[3][1] + out[3];
+    out[0] = v[2] * m[0][2] + out[0];
+    out[1] = v[2] * m[1][2] + out[1];
+    out[2] = v[2] * m[2][2] + out[2];
+    out[3] = v[2] * m[3][2] + out[3];
+    out[0] = out[0] + m[0][3];
+    out[1] = out[1] + m[1][3];
+    out[2] = out[2] + m[2][3];
+    out[3] = out[3] + m[3][3];
+}
+
+u32 fn_8014EF58(const f32 (*m)[4], const f32 *v, f32 *out, f32 *ndc) {
+    u32 over, neg, w;
+    f32 inv;
+
+    MtxMultVec4(m, v, out);
     w = ((u32 *)out)[3];
     inv = lbl_8036453C / out[3];
+    neg = ((((u32 *)out)[0] >> 31) << 2);
+    over = (((w - ((u32 *)out)[0]) >> 31) << 3);
+    neg |= ((((u32 *)out)[1] >> 31) << 4);
+    over |= (((w - ((u32 *)out)[1]) >> 31) << 5);
+    neg |= (((u32 *)out)[2] >> 31);
+    over |= ((u32)((s32)(w - ((u32 *)out)[2]) < 0) << 1);
     ndc[0] = out[0] * inv;
     ndc[1] = out[1] * inv;
     ndc[2] = out[2] * inv;
-
-    neg = ((y >> 27) & 0x10) | ((x >> 29) & 4) | (z >> 31);
-    over = (((w - y) >> 26) & 0x20) | (((w - x) >> 28) & 8) | (((w - z) >> 30) & 2);
     return neg | (over & ~(neg << 1));
 }
+
+
+
 
 
 
@@ -207,35 +238,6 @@ void fn_8014F198(f32 *m, const f32 *r, const f32 *s, const f32 *o, f32 n, f32 f)
     m[7] = lbl_80364544;
     m[11] = -(n * q);
     m[15] = lbl_80364544;
-}
-
-/* QV=2.0p1 */
-u32 fn_8014EE48(f32 (*__restrict m)[4], f32 *__restrict v, f32 *__restrict out) {
-    u32 x, y, z;
-    u32 neg, over;
-
-    out[0] = v[0] * m[0][0];
-    out[1] = v[0] * m[1][0];
-    out[2] = v[0] * m[2][0];
-    out[0] = v[1] * m[0][1] + out[0];
-    out[1] = v[1] * m[1][1] + out[1];
-    out[2] = v[1] * m[2][1] + out[2];
-    out[0] = v[2] * m[0][2] + out[0];
-    out[1] = v[2] * m[1][2] + out[1];
-    out[2] = v[2] * m[2][2] + out[2];
-    out[0] = out[0] + m[0][3];
-    out[1] = out[1] + m[1][3];
-    out[2] = out[2] + m[2][3];
-    x = ((u32 *)out)[0];
-    y = ((u32 *)out)[1];
-    z = ((u32 *)out)[2];
-    neg = ((x >> 29) & 4);
-    over = (((0x3F800000 - x) >> 28) & 8);
-    neg |= ((y >> 27) & 16);
-    over |= (((0x3F800000 - y) >> 26) & 32);
-    neg |= (z >> 31);
-    over |= (((0x3F800000 - z) >> 30) & 2);
-    return neg | (over & ~(neg << 1));
 }
 
 } /* extern "C" */
