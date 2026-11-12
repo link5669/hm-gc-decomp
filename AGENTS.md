@@ -23,6 +23,8 @@ text_8002F118 80034AFC 8004058C 8004C4FC 800629DC 80066714 8006BB24 80078308 800
 **Status of those 24 (collaborator, 2026-11-12):** 23 are linked (details under "Coordination", last entries). Open:
 text_800A75B8 (int->float constant shared with unmatched fn_800A6BFC).
 
+- **Claude tried (2026-11-12, user-approved) to link the 4 units in your range that pass `equivcheck --list` after PR #7; none linked, all need a TU merge (yours to do):** text_8003B5F8 and text_800A10D4 each emit their own int->float magic, which is shared with neighbours (8003BC2C; 800A226C/800A2870) -> merge with them. text_8009DD24 (data outside .text) and text_800A75B8 (constant shared with an unmatched neighbour) as before. Also: text_80051B50 (.c) is EXACT but needs `-Cpp_exceptions on` for its extab and owns .data 802B97D8-802BA100; moving the jt_802B97D8 split makes a cyclic link order, so it needs a TU merge 800502FC..80051B50. `equivcheck --list` skips .c units (it looks for `<unit>.c.o`, ninja builds `<unit>.o`). text_800B7DF4 does not qualify (__OSReboot 836 vs 832 bytes).
+
 **Claude's range** (`>= 0x80165000`, Bink/MSL/SDK; ~118 unmatched) stays with Claude; don't edit those units.
 
 ## Status and ownership
