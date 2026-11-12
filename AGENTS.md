@@ -4,23 +4,9 @@ This is the matching decompilation of The Haunted Mansion (GameCube, GHYE6S). Re
 
 ## START HERE (collaborator, 2026-11-12)
 
-**Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
-that are still unmatched on `main` (function, unit, current match %; register-equivalent ones already excluded).
-Same rules as before: get each to an exact match (preferred) or register-equivalent (`python3 tools/equivcheck.py
---list <unit>`, add the fn to `config/GHYE6S/regequiv.txt`, set the unit `Matching`), `ninja` +
-`python3 tools/equivcheck.py` must pass before you push. Work on `main` (or PRs into `main`) as usual.
-
-**Claude workers have stopped committing to `main`** (user decision, 2026-11-12). All Claude work now happens on the
-branch **`sched-equiv`**, which `main` is merged into regularly; `main` is entirely yours. Claude's last `main`
-commits are `f1682675` and `da816019`. Claude's range (`>= 0x80165000`, Bink/MSL/SDK; 118 unmatched functions) is
-not handed over; leave it alone unless the user says otherwise.
-
-**FYI, `sched-equiv` experiment (not on `main`, not approved for `main` yet):** an extra equivcheck rule that also
-accepts functions whose only remaining difference is instruction order inside a basic block (dependency-preserving;
-allowlist `config/GHYE6S/schedequiv.txt`). It flags 24 units in YOUR range as schedule-only: text_8002F118 80034AFC
-8004058C 8004C4FC 800629DC 80066714 8006BB24 80078308 800885A0 800904CC 80093A70 80099BF8 800A75B8 800B1D58
-80110ADC 801229D0 8012E3F4 8013FCD0 80149A40 8014C830 80155124 801581F0 80159284 8015B860. These are low priority
-for hand-matching on `main` (they are "only" scheduling); Claude does not convert them on the branch either.
+**`main` is frozen. All work (collaborator and Claude) now happens on the branch `sched-equiv`:**
+`git fetch && git checkout sched-equiv`, then read the "START HERE" section of `AGENTS.md` THERE (your to-do list
+`tools/decomp_agent/collaborator_2026-11-12.txt` and 24 easy schedule-equivalent links in your range).
 
 ## Status and ownership
 
