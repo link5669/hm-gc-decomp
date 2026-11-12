@@ -1,5 +1,10 @@
 /* Functions from 0x800FEEA0 to 0x800FF140, found by decomp-toolkit. */
 #include "common.h"
+extern "C" {
+// the 0.0f of this function is the TU pool constant lbl_80363740; the first read goes through a cast, which keeps
+// the literal-like code (all-plain or all-cast reads change it)
+extern f32 lbl_80363740;
+}
 
 extern "C" {
 
@@ -60,25 +65,25 @@ s32 fn_800FEFC8(f32 *box, f32 *sphere) {
     dx = (f32)__fabs(sphere[0]) - box[3];
     dy = (f32)__fabs(sphere[1]) - box[4];
     dz = (f32)__fabs(z) - box[5];
-    if (dx <= 0.0f) {
-        if (dy <= 0.0f) {
-            if (dz <= 0.0f) {
+    if (dx <= (*(f32 *)&lbl_80363740)) {
+        if (dy <= lbl_80363740) {
+            if (dz <= lbl_80363740) {
                 return 1;
             }
             return dz <= sphere[3];
         }
-        if (dz <= 0.0f) {
+        if (dz <= lbl_80363740) {
             return dy <= sphere[3];
         }
         return dy * dy + dz * dz <= sphere[3] * sphere[3];
     }
-    if (dy <= 0.0f) {
-        if (dz <= 0.0f) {
+    if (dy <= lbl_80363740) {
+        if (dz <= lbl_80363740) {
             return dx <= sphere[3];
         }
         return dx * dx + dz * dz <= sphere[3] * sphere[3];
     }
-    if (dz <= 0.0f) {
+    if (dz <= lbl_80363740) {
         return dx * dx + dy * dy <= sphere[3] * sphere[3];
     }
     return dx * dx + dy * dy + dz * dz <= sphere[3] * sphere[3];

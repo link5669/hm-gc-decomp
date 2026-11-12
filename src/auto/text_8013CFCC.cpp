@@ -1,4 +1,6 @@
-// NonMatching draft (wRA): more2() direct-return form for loop/0xDD/0xFE sites fixes loop regs (DIFF 38->32, SDIFF 0). Left: 0xC4 ok r29 vs r30, prec r4 vs r5.
+// JPEG marker loop. fn_801F4C84 takes the table precision as a third argument (the temp the original keeps in r5).
+// Every "more data?" test is the same inline (one result temp, r30); the DHT case ends in a goto form because
+// "if (x) return 1; return 0;" is folded into a branchless x != 0.
 #include "common.h"
 
 extern "C" {
@@ -20,23 +22,18 @@ struct D {
 };
 u16 fn_801F359C(S *);
 u8 fn_801F36D8(S *);
-void fn_801F4C84(QT *, R *);
+void fn_801F4C84(QT *, R *, u32);
 s32 fn_801F5874(HT *, R *);
 void fn_801F5948(D *, s32);
 s32 fn_8013CCD0(D *);
 s32 fn_8013C63C(D *);
 
 static inline bool more(D *d) {
-    bool ok = false;
-    if (d->r->s->cur < d->r->s->end || d->r->s->v3() == 0) ok = true;
-    return ok;
-}
-static inline bool more2(D *d) {
     return d->r->s->cur < d->r->s->end || d->r->s->v3() == 0;
 }
 
 s32 fn_8013CFCC(D *d) {
-    while (more2(d)) {
+    while (more(d)) {
         switch (fn_801F36D8(d->r->s)) {
         case 0xD8:
             return 1;
@@ -48,7 +45,7 @@ s32 fn_8013CFCC(D *d) {
                 u32 prec = (c >> 4) & 0xF;
                 if (id >= 4) { d->err = 1; return 0; }
                 len -= (prec + 1) * 64;
-                fn_801F4C84(&d->qt[id], d->r);
+                fn_801F4C84(&d->qt[id], d->r, prec);
                 c = fn_801F36D8(d->r->s);
                 len--;
             }
@@ -91,15 +88,16 @@ s32 fn_8013CFCC(D *d) {
                 c = fn_801F36D8(d->r->s);
                 len--;
             }
-            if (more(d)) return 1;
-            return 0;
+            if (!more(d)) goto z;
+            return 1;
+            z: return 0;
         }
         case 0xDA:
             return fn_8013C63C(d);
         case 0xDD:
             fn_801F359C(d->r->s);
             d->ri = fn_801F359C(d->r->s);
-            return more2(d) != 0;
+            return more(d) != 0;
         case 0xD9:
             return 0;
         case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6: case 0xE7:
@@ -109,7 +107,7 @@ s32 fn_8013CFCC(D *d) {
             u16 len = fn_801F359C(d->r->s);
             fn_801F5948(d, len - 2);
             }
-            return more2(d) != 0;
+            return more(d) != 0;
         case 0xFF:
             break;
         default:

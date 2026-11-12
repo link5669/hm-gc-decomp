@@ -13,6 +13,8 @@ extern FT lbl_803286D0;
 extern u32 lbl_8035C324, lbl_8035C320;
 extern char lbl_8035C334[5];
 extern f32 lbl_8035C328;
+extern f32 lbl_8035C2FC, lbl_8035C300;
+extern f32 lbl_8035C32C, lbl_8035C330;
 void fn_80241628(void *, s32, s32);
 s32 fn_80264E0C(V3 *, V3 *, V3 *, s32, s32, s32, s32, s32, s32, s32, s32, s32, s32, s32, s32);
 void fn_80190C98(void *);
@@ -67,17 +69,17 @@ void fn_8004058C(u8 *p, f32 dt) {
                 *(u32 *)(c + 32) |= lbl_8035C320;
                 fn_80190C98(o);
             }
-            s = 1.0f - (pos.z - res.z) / *F(f32 *, 324);
-            if (s < 0.0f) s = 0.0f;
+            s = lbl_8035C300 - (pos.z - res.z) / *F(f32 *, 324);
+            if (s < lbl_8035C2FC) s = (*(f32 *)&lbl_8035C2FC);
             sc.x = s; sc.y = s; sc.z = s;
             if (*(void **)(F(u8 *, 340) + 120) != 0) fn_80107F3C(*(void **)(F(u8 *, 340) + 120), &sc);
         }
     }
     if (F(s32, 96) == 2) {
         f32 t = *(f32 *)((u8 *)F(VO *, 224) + 340);
-        if (t < 0.25f && F(void *, 264) != 0) fn_80248514(F(void *, 264), t / 0.25f, 0);
+        if (t < lbl_8035C32C && F(void *, 264) != 0) fn_80248514(F(void *, 264), t / lbl_8035C32C, 0);
     }
-    if (pos.z < F(f32, 356) - 5.0f) {
+    if (pos.z < F(f32, 356) - lbl_8035C330) {
         fn_80241DD0(p, lbl_8035C334, 0, 0, 0, 0);
         fn_802494A4(p, 0);
     }

@@ -1,19 +1,19 @@
-// fn_80061E80: main menu/attract state loop (states 2 -> 1). NonMatching: all instructions match except
-// SDIFF 0 (register coloring only): volatile st init + volatile lbl_8035A0A4 read fixed the fn_8003C674 arg schedule (wNV). See hm-work/wA_80061E80.
-// A match also needs dtor_80031570/dtor_8003493C renamed to __dt__9C80031570Fv/__dt__9C8003493CFv (DESTROYLOCAL).
+// fn_80061E80: main menu/attract state loop (states 2 -> 1). Register-equivalent (regequiv.txt): all instructions
+// match, register coloring differs; volatile st init + volatile lbl_8035A0A4 read fixed the fn_8003C674 arg schedule (wNV).
+// Its two local objects are C800315E4 and C80034A10 (dtors renamed from dtor_80031570 / dtor_8003493C for DESTROYLOCAL).
 #include "common.h"
 
-struct C80031570 {
+struct C800315E4 {
     u8 p0[0x68];
     u32 f68;
     u32 f6c;
     u8 p70[0x1c];
     u32 f8c;
     u8 p90[0x340 - 0x90];
-    C80031570();
-    ~C80031570();
+    C800315E4();
+    ~C800315E4();
 };
-struct C8003493C {
+struct C80034A10 {
     u8 p0[0x68];
     u32 f68;
     u32 f6c;
@@ -22,8 +22,8 @@ struct C8003493C {
     u8 p90[0x2c4 - 0x90];
     u32 f2c4;
     u8 p2c8[0xc38 - 0x2c8];
-    C8003493C();
-    ~C8003493C();
+    C80034A10();
+    ~C80034A10();
 };
 struct C801829F8 {
     u8 p[0x78];
@@ -217,12 +217,12 @@ extern char lbl_8035E638[4], lbl_8035E670[4], lbl_8035E5C8[4], lbl_8035E5D0[4], 
 extern char lbl_8035E68C[4], lbl_8035E698[4];
 extern f32 lbl_8035E688, lbl_8035E694;
 
-void fn_80030E98(C80031570 *, P *, void *, void *, void *);
+void fn_80030E98(C800315E4 *, P *, void *, void *, void *);
 void fn_80251428(void *, char *);
 void fn_80251488(void *, char *);
 int fn_8003AEEC(void *);
-int fn_80030610(C80031570 *);
-void fn_80031434(C80031570 *);
+int fn_80030610(C800315E4 *);
+void fn_80031434(C800315E4 *);
 void fn_8003AD38(void *, const char *, s32, s32, s32);
 void fn_8003BA20(void *, void *);
 void fn_8003B5F8(void *, const char *);
@@ -233,11 +233,11 @@ void fn_800F7E98(void);
 void fn_8012ACAC(void *, void *, const char *, int, int);
 void fn_8018182C(C801829F8 *, u8 *, const char *, int);
 void fn_80215FDC(void *);
-void fn_80033C38(C8003493C *, P *, void *, void *, void *);
+void fn_80033C38(C80034A10 *, P *, void *, void *, void *);
 void fn_8003B87C(void *, int);
-int fn_80032CC4(C8003493C *);
+int fn_80032CC4(C80034A10 *);
 void __ct__9C80253F24Fiiii(u32, char *, int, int, int);
-void fn_800338E8(C8003493C *);
+void fn_800338E8(C80034A10 *);
 int fn_8003C674(void *, const char *, s32 **);
 s32 fn_8003C8E4(void *);
 void fn_8003D130(void *, s32);
@@ -257,12 +257,10 @@ void *fn_801AAF94(Node *, u32, u32);
 V50 *fn_800F9398(void *, void *);
 void fn_8003E5F4(void *);
 void fn_802119D8(void *);
-void fn_800315E4(C80031570 *);
-void __ct__9C80034A10Fv(C8003493C *);
+void fn_800315E4(C800315E4 *);
 }
 
-inline C80031570::C80031570() { fn_800315E4(this); }
-inline C8003493C::C8003493C() { __ct__9C80034A10Fv(this); }
+inline C800315E4::C800315E4() { fn_800315E4(this); }
 
 static inline void Check(void *p, s32 code) { if (!p) fn_800604C4(code, 0, 0, 0); }
 
@@ -277,7 +275,7 @@ static inline void Frame(P *p, V50 *a, V50 *b) {
 
 extern "C" void fn_80061E80(P *p) {
     char *s = lbl_80297350;
-    C80031570 a;
+    C800315E4 a;
     u8 *tbl = (u8 *)p + 0x3040;
     p->f33f0 = 0;
     int done = 0;
@@ -336,7 +334,7 @@ extern "C" void fn_80061E80(P *p) {
                 p->f33b8 = 1;
             }
             fn_8003B5F8(p->f3550, s + 0x2a4);
-            C8003493C b;
+            C80034A10 b;
             fn_8003B5F8(p->f3550, s + 0x2b4);
             fn_80033C38(&b, p, p->f33e0, p->f36cc, p->f36d0);
             p->f33f0 = lbl_8035B65C;

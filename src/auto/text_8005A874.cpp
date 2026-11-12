@@ -80,10 +80,10 @@ void fn_8005A874(P_A874 *p) {
         grp = fn_8023F52C(p, lbl_8035E298, b48, str + 0x88, 0, 0);
         for (j = 0; j < *cnt; j++) {
             fn_800F6E88(b10, b28);
-            b10[8] = 0;
-            b10[5] = 'S';
             b10[6] = j / 10 + '0';
             b10[7] = j % 10 + '1';
+            b10[5] = 'S';
+            b10[8] = 0;
             if (fn_8010FEDC(mgr, set, b10, 0)) {
                 memcpy(b8, b10, 8);
                 if (grp) fn_80234028(p->f130, b8, name, grp);

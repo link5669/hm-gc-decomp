@@ -1,5 +1,5 @@
 // fn_800FD530: box (half extents) vs sphere: vector from box surface to sphere surface, returns signed distance.
-// NonMatching draft: zero-constant (lbl_80363740) load hoisted above d stores + CSEd into the outside branch.
+// Register-equivalent (regequiv.txt): the zero constant lbl_80363740 and one product sit in swapped FPRs (GC/2.6).
 #include "common.h"
 
 extern "C" {
@@ -30,6 +30,7 @@ static inline f32 sqrtf_800FD530(f32 x) {
     return x;
 }
 
+#define Z2 (*(f32 *)&lbl_80363740)
 static inline f64 FA(f64 x) { return __fabs(x); }
 
 f32 fn_800FD530(Box_800FD530 *a, Sph_800FD530 *__restrict p, V3_800FD530 *out, f32 *o1, f32 *o2) {
@@ -77,17 +78,17 @@ f32 fn_800FD530(Box_800FD530 *a, Sph_800FD530 *__restrict p, V3_800FD530 *out, f
             }
         }
     } else {
-        if (d.x <= *(volatile f32 *)&lbl_80363740) {
-            if (d.y <= lbl_80363740) {
+        if (d.x <= Z2) {
+            if (d.y <= Z2) {
                 s = d.z - p->r;
-                out->x = lbl_80363740;
-                out->y = lbl_80363740;
+                out->x = Z2;
+                out->y = Z2;
                 out->z = s;
-            } else if (d.z <= lbl_80363740) {
+            } else if (d.z <= Z2) {
                 s = d.y - p->r;
-                out->x = lbl_80363740;
+                out->x = Z2;
                 out->y = s;
-                out->z = lbl_80363740;
+                out->z = Z2;
             } else {
                 fn_80101744(out, &d);
                 s = sqrtf_800FD530(d.y * d.y + d.z * d.z) - p->r;
@@ -95,12 +96,12 @@ f32 fn_800FD530(Box_800FD530 *a, Sph_800FD530 *__restrict p, V3_800FD530 *out, f
                 out->y *= s;
                 out->z *= s;
             }
-        } else if (d.y <= lbl_80363740) {
-            if (d.z <= lbl_80363740) {
+        } else if (d.y <= Z2) {
+            if (d.z <= Z2) {
                 s = d.x - p->r;
                 out->x = s;
-                out->y = lbl_80363740;
-                out->z = lbl_80363740;
+                out->y = Z2;
+                out->z = Z2;
             } else {
                 fn_80101744(out, &d);
                 s = sqrtf_800FD530(d.x * d.x + d.z * d.z) - p->r;
@@ -108,7 +109,7 @@ f32 fn_800FD530(Box_800FD530 *a, Sph_800FD530 *__restrict p, V3_800FD530 *out, f
                 out->y *= s;
                 out->z *= s;
             }
-        } else if (d.z <= lbl_80363740) {
+        } else if (d.z <= Z2) {
             fn_80101744(out, &d);
             s = sqrtf_800FD530(d.x * d.x + d.y * d.y) - p->r;
             out->x *= s;
@@ -121,7 +122,7 @@ f32 fn_800FD530(Box_800FD530 *a, Sph_800FD530 *__restrict p, V3_800FD530 *out, f
             out->y *= s;
             out->z *= s;
         }
-        neg = s < lbl_80363740;
+        neg = s < Z2;
     }
     if (p->c.x < ax) out->x = -out->x;
     if (p->c.y < ay) out->y = -out->y;

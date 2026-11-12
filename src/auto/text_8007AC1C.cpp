@@ -174,13 +174,11 @@ void fn_8007AC1C(Obj *o, f32 dt) {
                         k = *(volatile f32 *)&lbl_8035F76C;
                         VS(ay.x) = k;
                         VS(((f32 *)&c)[4]) = k;
-                        f32 cz = nx * k - ny * k;
                         {
-                            f32 k2 = lbl_8035F790;
-                            VS(ay.z) = k2;
-                            VS(c.z) = cz;
-                            c.x = ny * k2 - k * nz;
-                            c.y = nz * k - nx * k2;
+                            VS(ay.z) = lbl_8035F790;
+                            c.x = ny * lbl_8035F790 - k * nz;
+                            c.y = nz * k - nx * lbl_8035F790;
+                            c.z = nx * k - ny * k;
                         }
                     }
                 }

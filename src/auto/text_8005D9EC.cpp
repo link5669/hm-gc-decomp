@@ -110,11 +110,13 @@ void fn_8005D9EC(T *t, void *a, int b, V *c, char *d, L *nl) {
     t->get(&p0, &p1, &p2, &p3, 0);
     *(volatile f32 *)&p0.x = p0.x - lbl_8035E4A8;
     *(volatile f32 *)&p0.y = p0.y - lbl_8035E4A8;
-    *(volatile f32 *)&p0.z = p0.z - *(volatile f32 *)&lbl_8035E4C4;
-    { f32 m = *(volatile f32 *)&lbl_8035E4C8;
+    { f32 m, z;
+    z = p0.z - *(volatile f32 *)&lbl_8035E4C4;
+    *(volatile f32 *)&p0.z = z;
+    m = *(volatile f32 *)&lbl_8035E4C8;
     p0.x = p0.x - m * p1.x;
     p0.y = p0.y - m * p1.y;
-    p0.z = p0.z - m * p1.z; }
+    p0.z = z - m * p1.z; }
     if (t->f748) {
         P *pp;
         Q *q;

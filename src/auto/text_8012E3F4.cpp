@@ -3,9 +3,11 @@ extern "C" {
 struct C8012E79C { C8012E79C(); u32 d[6]; };
 struct Rec { u32 w, h, x, y, x2, y2; };
 struct GT { u32 a[16]; u32 b[16]; Rec r[64]; };
-static u32 lbl_8032A490[16];
-static u32 lbl_8032A4D0[16];
-static Rec lbl_8032A510[64];
+// The unit owns .bss 8032A490-8032BD10. lbl_8032A510 is the 256-entry array that the sinit fn_8012EE9C
+// constructs (it refers to it by name), so these are globals with the original sizes.
+u32 lbl_8032A490[16];
+u32 lbl_8032A4D0[16];
+Rec lbl_8032A510[256];
 extern u32 lbl_80363F08;
 extern void *lbl_8035ABE0;
 void fn_800604C4(s32, s32, s32, s32);

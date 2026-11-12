@@ -1,4 +1,6 @@
-// fn_80095770 NonMatching draft (wMY): DIFF 34 / SDIFF 4 (wRW: el via GE getter inline). Volatile copy/neg stores + volatile K reads pin the sda loads (recipe from TIPS wDJ). Left: start.z store slot, one fneg slot, cross-product FP regs.
+// fn_80095770: schedule-equivalent (two store slots in the negation block). Named locals are declared in the order of the
+// original's FPRs, lowest first (first block: bz0, by0, bx0, k0, pz, py, px; cross block: dx, dy, dz, bz, by, bx), and the
+// first cross is written out so that no inline parameter stands in for them.
 #include "common.h"
 extern "C" {
 typedef struct { float x, y, z; } V3;
@@ -25,6 +27,7 @@ static inline void Cp(V3 *d, const V3 *s) { d->x = s->x; d->y = s->y; d->z = s->
 static inline void CpV(V3 *d, const V3 *s) { *(volatile float *)&d->x = s->x; *(volatile float *)&d->y = s->y; *(volatile float *)&d->z = s->z; }
 static inline void Madd(V3 *d, const V3 *s, float k) { d->x = k * s->x + d->x; d->y = k * s->y + d->y; d->z = k * s->z + d->z; }
 static inline void Cross(V3 *o, const V3 *a, const V3 *b) { float x = a->y * b->z - a->z * b->y; float y = a->z * b->x - a->x * b->z; float z = a->x * b->y - a->y * b->x; o->x = x; o->y = y; o->z = z; }
+static inline void Madd3(V3 *d, float k, float x, float y, float z) { d->x = k * x + d->x; d->y = k * y + d->y; d->z = k * z + d->z; }
 static inline float Sq(float x) {
     if (x > lbl_80361010) {
         const double _half = lbl_80361018;
@@ -47,21 +50,25 @@ static inline float GZ(const V3 *v) { return v->z; }
 static inline void Sub(V3 *o, const V3 *a, const V3 *b) { o->x = a->x - b->x; o->y = a->y - b->y; o->z = a->z - b->z; }
 void fn_80095770(char *self, V3 a, V3 b, int n, char *obj) {
     V3 p, start, end, hit, nrm, c, u, e;
-    float pz, py, px;
+    float bz0, by0, bx0, k0, pz, py, px;
     px = a.x; py = a.y; pz = a.z;
-    *(volatile float *)&start.x = px; *(volatile float *)&start.y = py; *(volatile float *)&start.z = pz;
+    *(volatile float *)&start.x = px; bx0 = *(volatile float *)&b.x; *(volatile float *)&start.y = py; by0 = *(volatile float *)&b.y; bz0 = *(volatile float *)&b.z; *(volatile float *)&start.z = pz;
     *(volatile float *)&end.x = px; *(volatile float *)&end.y = py; *(volatile float *)&end.z = pz;
-    Madd(&end, &b, *(volatile float *)&lbl_80361008);
+    k0 = *(volatile float *)&lbl_80361008;
+    Madd3(&end, k0, bx0, by0, bz0);
     u8 name[8];
     int o38, o34;
     void *o30;
     int r = fn_80264E0C(&start, &end, &hit, &nrm, &o38, &o34, &o30, 0, name, 0, 0, 0, 0, 0, 1);
-    V3 d; float bx = b.x, by = b.y, bz = GZ(&b);
-    d.x = start.x - lbl_80357B1C.x;
-    d.y = start.y - lbl_80357B1C.y;
-    d.z = start.z - lbl_80357B1C.z;
+    float dx, dy, dz, bz, by, bx;
+    bx = b.x; by = b.y; bz = b.z;
+    dx = start.x - lbl_80357B1C.x;
+    dy = start.y - lbl_80357B1C.y;
+    dz = start.z - lbl_80357B1C.z;
     u.x = bx; u.y = by; u.z = bz;
-    Cross(&c, &u, &d);
+    c.x = by * dz - bz * dy;
+    c.y = bz * dx - bx * dz;
+    c.z = bx * dy - by * dx;
     Cross(&e, &c, &u);
     fn_80101820(&e);
     fn_80101820(&c);

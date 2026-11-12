@@ -20,6 +20,8 @@ Easy wins in YOUR range: these 24 units already report schedule-equivalent and c
 text_8002F118 80034AFC 8004058C 8004C4FC 800629DC 80066714 8006BB24 80078308 800885A0 800904CC 80093A70 80099BF8
 800A75B8 800B1D58 80110ADC 801229D0 8012E3F4 8013FCD0 80149A40 8014C830 80155124 801581F0 80159284 8015B860
 (re-run `--list` first; a unit with data outside .text may still fail the full link, as text_80166094 did).
+**Status of those 24 (collaborator, 2026-11-12):** 23 are linked (details under "Coordination", last entries). Open:
+text_800A75B8 (int->float constant shared with unmatched fn_800A6BFC).
 
 **Claude's range** (`>= 0x80165000`, Bink/MSL/SDK; ~118 unmatched) stays with Claude; don't edit those units.
 
@@ -1088,3 +1090,167 @@ wGZ (user-approved, collaborator units, 2026-11-05): matched fn_801C6D74 (NonMat
 - Claimed by Claude workers 2026-11-11 (user-approved): data-side link fixes for text_8006F808 text_80077010 text_8009DD24 text_8010E450 text_801218C4 (code already register-equivalent; failing bytes are outside .text).
 - wWI (2026-11-11, released, user-approved collaborator units): linked text_801218C4 (owns .sdata2 80363DF0-E08) and text_8010E450 (owns the 12-byte vtable lbl_802E29F8 before its 4-mod-8 jump table). Still NonMatching, released back: text_8006F808 and text_80077010 (int->float magic 0x8035F788 is owned by text_80079A9C; a manual union conversion through `extern const f64` emits fsub+frsp and a different frame, 2 builds; 80077010 also has a pad_strs extra function and a .rodata string pool at 0x80298060), text_8009DD24 (data side solved: own .rodata 8029A530-A600 [symbols.txt split lbl_8029A590 at A600], .data 802CEA98-802CF034 as raw words with real pointers, jt_802CEA94 shrunk to A94-A98, `extern const S5 lbl_8029A590` copied in loadA; but the extab header differs because ours saves r21..r31 vs the original r26..r31 - needs the original register allocation; diff in hm-work/wWI/p_8009DD24_data.diff), text_8009DD24 stays NonMatching.
 - wXA (2026-11-12): matched fn_802625FC (real string literals instead of an extern string struct -> string base addi; fn_80262D38 identity/reset recipe; param reused as the node variable) and merged `text_80262D38` into `text_802625FC.cpp` (one TU 802625FC-80262FA0, `-str reuse,readonly`; owns .rodata 802AA010-802AA190, .bss 80357E78-80357EA0, .sdata2 80366AE8-80366B10), Matching. The `text_80262D38` unit no longer exists; `text_80262FA0.c` (ctor, same TU originally) still separate/NonMatching.
+- collaborator (branch sched-equiv, 2026-11-12): **37 more units of the collaborator range linked** (7,054 -> 7,091 units
+  linked overall, counting upstream's merges), all under `equivcheck.py` (regequiv.txt / schedequiv.txt).
+  - Linked as they were (data outside .text already matched): text_8002F118 80034AFC 80066714 800885A0 800904CC 80099BF8
+    80110ADC 801229D0 8013FCD0 80149A40 8014C830 80155124 801581F0 80159284 8015B860 (schedule), 80157DD4 (register), and
+    after the rule f memory rules 'global'/'pointer' landed: 8002D080 8002F3C8 8004B388 80124AE4.
+  - Own int->float constant in splits.txt (no other user): 800629DC (8035E6F8), 80134C30 (803640F8).
+  - Descriptor tables filled from the DOL (`build/agent_ds/datafill.py`-style: tables + vtable move out of the jt_ unit,
+    switch fn force_active): 8004C4FC, 80093A70, 8003F1E0, 800B1844.
+  - text_8004058C and text_800515C4: the float literals are shared TU pool constants, so they are externs now. A plain
+    `extern f32` read is not always code-neutral: a constant used twice in a clamp keeps its colouring when the second use
+    is spelled `*(f32 *)&lbl` (8004058C); where the draft had literals, reading EVERY use as `*(f32 *)&lbl` kept the code
+    (800515C4). Owning two float literals at a 4-mod-8 address does NOT work: the linker 8-aligns the object's .sdata2.
+  - text_8012E3F4: owns .bss 8032A490-8032BD10 as globals (lbl_8032A510 is the 256-entry array the sinit fn_8012EE9C
+    constructs by name); extab_padding B1 02.
+  - text_80061E80: renamed dtor_80031570 -> __dt__9C800315E4Fv and dtor_8003493C -> __dt__9C80034A10Fv (DESTROYLOCAL).
+  - TU merges: text_800B1844 + 800B1D58 + 800B21A0 (shared int->float constant 80362F98; one object type T for all three,
+    the vtable view A of fn_800B21A0 kept via `((A *)p->f224)`), text_80077010 + 80077944 + 80078308 (GC/2.0p1 + lmw, constant
+    8035F630; fn_80077010's pool lbl_80298060 through an extern base under opt_propagation off instead of literals + pad
+    function: same code), text_8014BDD4 + 8014C150 + 8014C1A4 (af36f733 re-applied; fn_8014BDD4 is schedule-equivalent).
+  - text_8003F1E0: besides its tables it owns .rodata 80294E98-80294F04, the TU string pool written as named
+    `const char` arrays in pool order (globals where other units use the label). The extern-base form changed the code here.
+  - From saved drafts (see next entry): main (text_800605AC), fn_800FD530, fn_800515C4, fn_8003F1E0 linked;
+    fn_800A10D4 is register-equivalent but its unit shares lbl_80361BE8 with 800A226C/800A2870 across unmatched fn_800A1AA8.
+  - fn_800690FC is exact now (lbl_8035F1C0 is the string "RhandRR", lbl_8035F1C8 the 1.0f: they were declared swapped).
+- collaborator (2026-11-12), cheap sweeps worth repeating after every checker change: (1) re-judge ALL saved drafts
+  (wave try/ dirs: `build/agent_ds/rescan.py` + `rsweep.py`) and (2) every historical version of a failing unit's source
+  (`git log --all`, `build/agent_ds/histsweep.py`) with `equivcheck --list` logic. The first run found passing versions of
+  5 functions among 3,834 saved files, the second the reverted 8014BDD4 TU merge. Drafts were kept by lowest DIFF, which is
+  not the same as "passes rule d/f".
+- collaborator (2026-11-12) **FP colouring before a call (fn_8006D124, now schedule+register-equivalent)**: rule d wants
+  every f1-f8 written in the block to hold the same value at the call, so a renamed temporary fails ("f2 holds a different
+  value at the call"). Named locals take ascending FPRs in DECLARATION order above the unnamed temporaries; a value that
+  must sit BELOW them has to stay an unnamed expression (repeat it, CSE keeps one copy). There: `f32 ax, ay, az, bz, bx, by;`
+  for the loaded components and `__fmadds(K * (len - k), ax, p.x)` three times instead of a named scale `s`.
+  The same search did not move fn_80087E20 (900 declaration/naming variants give 10 distinct outputs, none passing).
+- collaborator (2026-11-12), merge mechanics: a call through a function-pointer cast (`((void (*)(P *))fn)(p)`) is an
+  indirect call under GC/1.3.2 (lis/addi/mtctr/bctrl), so it cannot bridge two views of one callee; share the type instead.
+  One namespace per old unit needs `#undef` for every macro at the end of each part, classes whose ctor/dtor symbol matters
+  (`C801883E0`) at global scope (a namespace changes the mangled name), and no second declaration of an extern "C" name at
+  global scope (ambiguous).
+- collaborator (2026-11-12): **merged text_800690FC..text_8006FEA4 (34 units) into `text_800690FC.cpp`**, Matching
+  (GC/2.0p1 + lmw + `-str reuse,readonly`, one namespace per former unit; 31 exact, fn_8006BB24 / fn_8006D124
+  schedule-equivalent, fn_8006F808 register-equivalent). What made it link, reusable for the other pool/table TUs:
+  - .sdata2 8035F1E0-8035F210: the two compiler-made int->float constants are 0x28 apart in the original, with
+    "Enemy"/"BONUS"/"SPAWN"/0x2B between them. Those four are `__declspec(section ".sdata2")` definitions placed
+    between the function that first uses constant 1 and the one that first uses constant 2.
+  - String pool 80297908-80297E10 as named arrays in pool order. A GLOBAL array is addressed by its own lis/addi; only
+    statics get the literal-like base + offset form, and only with ONE STATIC PER STRING (two big static groups were
+    still addressed separately). So: table strings that other objects name = globals, strings the code uses = one
+    static each; a part that used `extern char lbl_X[]` on a pool label now casts the pool object instead.
+  - Tables 802BD3F8-802C1E70 + vtable from jt_802BD300 (datafill); its forward declarations of TU functions must be
+    untyped `void f(void);` at global scope (the real parameter types live in later namespaces).
+  - .bss 80306798-80306838: the TU's global object + registration record as globals named by label, then the
+    function statics, in the original order (the anchor of a base-register .bss access is the unit's first object).
+  - `#pragma opt_propagation off` of one part leaks into every later part: reset it at the end of the part (four
+    functions further down changed until then). `build/agent_ds/vtm.py` compiles a merged file once and checks every
+    function against its former unit's target object, before splits.txt is touched.
+- collaborator (2026-11-12, later): **more exact-code units linked by giving them their data** (no new matches needed):
+  - merged `text_8008F16C`..`text_80090C68` (13 units, two of them C) into `text_8008F16C.cpp` (lmw + readonly strings):
+    tables 802C88A8.. shared by fn_8008F16C and the descriptor-init fn_80090844 (the table statics are split where
+    fn_80090844 takes their addresses, so both functions keep base + offset addressing), pool 802995A8-8029975C, and
+    fn_80090C68's 4-mod-8 jump table directly behind fn_8008F16C's. `datafill.py` now accepts several consecutive
+    jump tables at the end of a unit's .data.
+  - `text_80091A9C` and `text_8008028C` WITHOUT a merge (all their neighbours already link): each owns its pool
+    (`build/agent_ds/poolify.py`: labels other units use = globals, every other string = a static named like its
+    label, so the filled tables can point at them) and its tables + vtable. After datafill the pool block has to sit
+    above the tables (`poolfirst.py`), else datafill's `extern u8 lbl_X[]` lines clash with the definitions.
+  - `text_800FEEA0`: its 0.0f is the pool constant lbl_80363740; exact with the FIRST read as `*(f32 *)&lbl` and the
+    other six plain (`litsweep.py`; all-plain and all-cast both change the code).
+  - Not solved: `text_80033C38` through an extern pool base is one instruction off (`addi r0,r8,0 .. mr r31,r0`
+    instead of `addi r31,r8,0`; 12 ways of declaring the base all give it), so it still needs the 800316C8 TU, which
+    unmatched fn_800326D0 blocks. `fn_8011CD28`: the two final stores in the original order (`self->head = it;
+    it->prev = 0;`) always swap the self/it callee-saved registers, which breaks the prologue pattern (not a
+    renaming the checker can accept); six push formulations x restrict combinations all do it.
+- collaborator (2026-11-12), **open leads in the collaborator range**: (b) 8003B3E8/8003B5F8/8003B87C: 5F8 is schedule-equivalent, but
+  its constant lbl_8035C168 is shared with unmatched fn_8003BC2C. (c) text_8009DD24: extab header (saved-register count).
+  (d) exact code, data-blocked: 8002B760/8002BDD4 (constant shared with 8002CA0C), 80051B50/80052028 (TU with 800502FC),
+  80033C38 (TU with 800326D0), 8007225C (pool of the 80072.. TU), 80088294 (constant shared with 80088B54), 800A226C/800A2870
+  (with 800A10D4, across 800A1AA8), 8014E1E0 (garbage pair inside a 0x88 extab action), 80163BE4/80163CB4 (TU crosses
+  0x80165000: 801650F8). Every one of these now waits on an unmatched function or on the other range.
+- collaborator (2026-11-12, evening): **six more to-do functions linked**, each a one-unit link whose data already
+  matched (45 of the 87 are now in linked units; NonMatching units below `0x80165000`: 62 -> 56). Exact: fn_8013CFCC,
+  fn_80085E44, fn_80087E20. Schedule-equivalent: fn_8005D9EC, fn_8007AC1C, fn_80030610.
+  - **A register-colouring model that predicted five of them** (GC/1.3.2 and 2.0p1): unnamed expression temporaries are
+    coloured first, the LATEST-CREATED first (creation = evaluation order of statements and operands); named locals
+    come after them; every value takes the lowest free volatile FPR (f0 up) or GPR. So: write down the register of
+    each value in the target, derive which value must be coloured before which (a value in f2 needs neighbours that
+    already hold f0 and f1), then pick which sub-expressions are named locals, their declaration order and the
+    statement order. What that meant in practice:
+    - cross product blocks (fn_80085E44, fn_80087E20, fn_8007AC1C): store the results straight from their expressions
+      in x, y, z order (the last-created z result takes f0); a product shared by two results is a named local declared
+      BEFORE the vector components when the original gives it a fresh, higher register
+      (`f32 t1; f32 vy = v.y; f32 vx = v.x; f32 vz = v.z; n.x = vy * K1 - (t1 = vz * K0); n.y = -(vx * K1 - t1);
+      n.z = vx * K0 - vy * K0;` with x and y as volatile stores and z plain = exact). Two equal products the original
+      keeps apart: swap the operands of one (CSE is syntactic; the checker accepts the commutative swap).
+    - fn_8005D9EC: `f32 m, z;` (constant first) gives K in f3 and the difference in f4.
+    - fn_80030610: `char *pool = lbl_X;` declared BEFORE `f32 dt = lbl_Y->f14;` creates the address temporary first, so
+      the global pointer is coloured first and takes r4. Half of the 120 declaration orders pass, exactly those.
+    - A named local initialised by a plain load is propagated and behaves like an unnamed temporary; read it through
+      a volatile cast to keep it a named local (fn_8003BC2C scale block: `f32 z, y, x, k;` with `k = *(volatile f32 *)&K`).
+  - **A temporary left in an argument register before a call can be a missing argument**: fn_8013CFCC kept the DQT
+    precision in r5 because `fn_801F4C84` takes it as a third parameter (`equivcheck` words this as "r5 (callee
+    input) holds a different value at the call"). Claude workers: fn_801F4C84 is in your range and reads r5.
+  - fn_8013CFCC, rest: all four "more data?" tests are one inline with an unnamed result, which gives them one shared
+    register (a named flag inside the inline is a separate variable per site); `if (x) return 1; return 0;` is folded
+    into a branchless `x != 0`, the form `if (!x) goto z; return 1; z: return 0;` keeps the original's branch.
+    `equivcheck` cannot follow this function's jump table (the base register is loaded in the loop header, not in the
+    block of the `bctr`), so it could only link as an exact match.
+  - A store through another local's address with an out-of-range index (`((f32 *)&c)[4]`, `((f32 *)col)[9]`) is a
+    "may alias anything" store: a later load of a global stays behind it. That is what delays the second constant in
+    fn_8007AC1C and keeps the next block's constant out of fn_8003BC2C's scale block.
+  - Not solved: fn_80088B54 (same cross block as fn_8007AC1C, but its components are loaded from the stack; five
+    sweeps, about 600 variants: the second constant is always loaded too early, so `d.x * K3` is scheduled before the
+    z result and the registers shift), fn_8003BC2C (draft improved, the scale block is exact; left: the second
+    int->float result is in f0 where the original has f1, in every spelling tried), fn_8003CAD8 (the original has the
+    first parameter in r31 and the lookup result in r30; cast copies, member function, inlines and all declaration
+    orders give the same code).
+- collaborator (2026-11-12, night): **fn_80095770 linked** (schedule-equivalent; 46 of the 87 at that point), and the colouring rule from the previous entry checked on small test functions
+  (GC/1.3.2 and 2.0p1, `-O4,p`):
+  - Volatile FPRs: unnamed temporaries first (latest-created first), then NAMED locals in DECLARATION order, each
+    taking the lowest free register. Four locals that are all live together get f1..f4 in declaration order whatever
+    the order of their assignments. So for a block that only differs in FP registers: declare the named locals in
+    the order of the ORIGINAL's registers, lowest first (fn_80095770: `float bz0, by0, bx0, k0, pz, py, px;` and
+    `float dx, dy, dz, bz, by, bx;`).
+  - An inline function's parameters and locals are separate variables created at the expansion. A local of the caller
+    that is only handed to an inline (`Cross(&c, &u, &d)`, or scalars passed to a helper) is coloured in the inline
+    parameter's place, not in its own declaration place: 720 declaration orders could not move b.x and d.z in
+    fn_80095770 until the first cross product was written out in the function itself.
+  - A named local initialised by a plain read of a GLOBAL scalar is not reliably a named local (in fn_80088B54 the two
+    constants kept f4/f5 through all 24 declaration orders); read it through a volatile cast when its position matters.
+  - Callee-saved GPRs (r31 down), in STRAIGHT-LINE test functions: locals in declaration order first, then the
+    parameters from LAST to FIRST. With a loop it is not declaration order any more: in
+    `q = getq(p); n = cnt(p); for (i = 0, off = 0; i < n; i++, off += 20) work(p, q->f10 + off, i);` the bound `n`
+    gets r31 and `q` r30 however they are declared, then `i` / `off` in declaration order, then the parameter (an
+    offset the compiler derives from `i * 20` takes the same place as an explicit `off`). So for saved registers
+    declaration order only settles ties between variables of the same kind. A
+    parameter copied into a local (same or other pointer type, through an identity inline, a base-class or
+    first-member conversion, a reference, a member function's `this`) is still coloured as the parameter; only a
+    local with a real computation (`p + 4`, `&p->member` at a non-zero offset, a loaded pointer) is a local of its
+    own. That is why fn_8003CAD8 (original: first parameter r31, lookup result r30, second parameter r29) does not
+    move: 30 forms give the result r31, `add` r30, the object r29.
+  - **fn_8005A874 linked too** (register-equivalent; 47 of the 87, 54 NonMatching units left below `0x80165000`).
+    Its 70 differing lines were a rotation of three saved registers, which rule d accepts as a renaming; the only
+    real obstacle was the spot the checker named: four independent byte stores (`b10[8] = 0; b10[5] = 'S';
+    b10[6] = j / 10 + '0'; b10[7] = j % 10 + '1';`). Their temporaries are coloured latest-created first, so the
+    statement order decides which of r0/r3/r5 holds the zero, the 'S' and the quotient: the order [6], [7], [5], [8]
+    is exact there (11 of the 24 orders pass). Before giving up on a "register-only" function, read the address in
+    the `equivcheck --list` message and sweep the statement order of that block alone.
+  - What the rule does not give is the SCHEDULE. Where the original keeps a load of a global behind a store, or
+    loads stack parameters right after the parameter copies, the instruction order has to be right first, because
+    the live ranges (and so the registers) follow from it. Still open for that reason: fn_80088B54 and fn_800AAC34
+    (the second constant is loaded 3 slots after a stack store in the original, earlier in every form tried),
+    fn_8015EED0 (stack parameter loaded at entry into r11, then `mr r3,r11`; `#pragma scheduling 604` / `7450` are
+    2 lines closer, none match), fn_8003BC2C (second int->float result in f1: no spelling of the conversion or of
+    the product puts it there, 40 forms).
+  - **Proposal for `equivcheck.py` rule f (measured in a private copy, nothing changed in the repo):** a register
+    that still holds an unmodified incoming argument (r3-r10 at entry, or a plain `mr` copy of one; a call clears
+    r0, r3-r12) cannot hold an address inside the frame the function allocates, nor of the back-chain word written
+    by its `stwu r1,-N(r1)`, nor of the LR save word at N+4: the caller computed that value before the frame
+    existed. Treating a load/store through such a base as disjoint from own-frame accesses `[0, N)`, from the
+    `stwu` itself and from the store at `N+4(r1)` makes fn_800FFA4C and fn_8014FABC pass (schedule- and
+    register-equivalent; their `lfs fX,0(r4)` sits above the `stwu` in the original). It needs no "no frame address
+    escapes" condition, so it also applies to functions that take `addi rX,r1,..`. Both units then still need their
+    0.0f in `.sdata2`.

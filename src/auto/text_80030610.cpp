@@ -90,8 +90,8 @@ static inline void sayc(Yo *y, char *a) {
 
 s32 fn_80030610(P *p) {
     char buf[8];
-    f32 dt = lbl_8035B488->f14;
     char *pool = lbl_80294740;
+    f32 dt = lbl_8035B488->f14;
     void *q;
     s32 res;
     u8 r;

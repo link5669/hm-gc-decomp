@@ -87,15 +87,13 @@ void fn_80087E20(O *p, int a, int b, int c, int d, int e, f32 x, f32 y) {
         V3 ax, t;
         fn_80101744(&t, &p->v118);
         {
-            f32 tz = t.z;
+            f32 t1;
             f32 ty = t.y;
             f32 tx = t.x;
-            f32 x = ty * lbl_8035FED4 - tz * lbl_8035FEB8;
-            f32 y = tz * lbl_8035FEB8 - tx * lbl_8035FED4;
-            f32 z = tx * *(f32 *)&lbl_8035FEB8 - ty * *(f32 *)&lbl_8035FEB8;
-            *(volatile f32 *)&ax.z = z;
-            *(volatile f32 *)&ax.x = x;
-            *(volatile f32 *)&ax.y = y;
+            f32 tz = t.z;
+            *(volatile f32 *)&ax.x = ty * lbl_8035FED4 - (t1 = tz * lbl_8035FEB8);
+            *(volatile f32 *)&ax.y = t1 - tx * lbl_8035FED4;
+            ax.z = tx * lbl_8035FEB8 - ty * lbl_8035FEB8;
         }
         fn_80101414(&p->v118, &ax, *(volatile f32 *)&lbl_8035FED8);
     }

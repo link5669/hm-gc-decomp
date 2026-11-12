@@ -1,3 +1,7 @@
+// fn_800515C4: schedule- and register-equivalent (schedequiv.txt). Saved wave-42 draft under
+// `#pragma scheduling 7400`; 13 instructions of the Scale(d, k) block are in another order and three FP
+// temporaries are renamed. 0.0f/1.0f are the shared pool constants lbl_8035DCA0/lbl_8035DCB0, read through
+// *(f32 *)& casts where the draft had literals (plain extern reads there change the code).
 #include "common.h"
 
 extern "C" {
@@ -60,10 +64,12 @@ static inline void Scale(Vec3 *v, f32 k) { f32 x = v->x, y = v->y, z = v->z; v->
 static inline f32 Acos(f32 x)
 {
     if ((f32)__fabs(x) <= lbl_8035DD28) return fn_800F045C(x);
-    if (x > 0.0f) return 0.0f;
+    if (x > (*(f32 *)&lbl_8035DCA0)) return (*(f32 *)&lbl_8035DCA0);
     return lbl_8035DD30;
 }
 
+#pragma push
+#pragma scheduling 7400
 void fn_800515C4(P *p, int a, int b, f32 dt)
 {
     Vec3 cam;
@@ -111,11 +117,11 @@ void fn_800515C4(P *p, int a, int b, f32 dt)
         sp = *p->f584;
     } else {
         f32 t;
-        h.z = 0.0f;
+        h.z = (*(f32 *)&lbl_8035DCA0);
         f32 g = lbl_8035DD34 * Acos(Dot(&h, &fw));
         t = (g - *p->f544) / (*p->f548 - *p->f544);
-        if (t < 0.0f) t = 0.0f;
-        if (t > 1.0f) t = 1.0f;
+        if (t < (*(f32 *)&lbl_8035DCA0)) t = (*(f32 *)&lbl_8035DCA0);
+        if (t > (*(f32 *)&lbl_8035DCB0)) t = (*(f32 *)&lbl_8035DCB0);
         sp = t * (*p->f540 - *p->f536) + *p->f536;
     }
     p->f628 -= sp * dt;
@@ -140,5 +146,7 @@ void fn_800515C4(P *p, int a, int b, f32 dt)
         p->f224->s14(&v20, 0, 0, 0, 0);
     }
 }
+
+#pragma pop
 
 }

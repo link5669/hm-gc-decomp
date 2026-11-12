@@ -10,6 +10,14 @@ detect_strings: true
 write_asm: true
 # Unreferenced functions the original link kept (the MW linker would dead-strip them once linked from C).
 force_active:
+- fn_8008028C
+- fn_80091A9C
+- fn_8008F16C
+- fn_800690FC
+- fn_8003F1E0
+- fn_8004C4FC
+- fn_80093A70
+- fn_800B1844
 - lbl_802E7CB0
 - lbl_802E7CC4
 - lbl_802E8190

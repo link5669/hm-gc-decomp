@@ -1,4 +1,8 @@
 #include "common.h"
+struct V3s { f32 x, y, z; };
+static inline void ScaleP(V3s *v, f32 k) { v->x *= k; v->y *= k; v->z *= k; }
+static inline void ScaleL(V3s *v, f32 k) { f32 x = v->x; f32 y = v->y; f32 z = v->z; v->x = x * k; v->y = y * k; v->z = z * k; }
+static inline void ScaleA(f32 *v, f32 k) { v[0] *= k; v[1] *= k; v[2] *= k; }
 extern "C" {
 struct Vec3 { f32 x, y, z; };
 struct Col { u8 r, g, b, a; };
@@ -164,9 +168,12 @@ void fn_8003BC2C(P *p)
         ((f32 *)col)[9] = k;
     }
     fn_80101820(&b);
-    b.x *= lbl_8035C19C;
-    b.y *= lbl_8035C19C;
-    ((f32 *)col)[9] = b.z * lbl_8035C19C;
+    {
+        f32 z, y, x, k;
+        x = b.x; k = *(volatile f32 *)&lbl_8035C19C; y = b.y; z = b.z;
+        x *= k; y *= k; z *= k;
+        ((f32 *)col)[7] = x; ((f32 *)col)[8] = y; ((f32 *)col)[9] = z;
+    }
     c.x = lbl_8035C158;
     c.y = lbl_8035C158;
     c.z = lbl_8035C158;

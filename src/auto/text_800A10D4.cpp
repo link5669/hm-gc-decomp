@@ -62,10 +62,24 @@ static inline void rel(T *self) {
             fn_80240DBC(self, lbl_80361BCC);
         }
 }
-void fn_800A10D4(void *sv, f32 dtv) {
-f32 dt = dtv;
+static inline void pickLoop(T *self, u32 i, u32 pick) {
+    for (; i < self->f400->f0->f16; i++) {
+                    Str s;
+                    fn_800F6E88(&s, self->f400->f12 + i * 8);
+                    if (fn_800F6CD0(&s, lbl_80361BD4) == 0 && (*self->f372 == 0 || (*self->f372 != 0 && i == pick))) {
+                        fn_80240B50(self, &s, *self->f364);
+                        {
+                            s32 ri = rand() % 10000u;
+                            f32 t = lbl_80361BD8 * (f32)ri;
+                            f32 d = *self->f380 - *self->f376;
+                            t = d * t + *self->f376;
+                            self->f524 = t;
+                        }
+                    }
+                }
+}
+void fn_800A10D4(T *self, f32 dt) {
 Q *q;
-T *self = (T *)sv;
 u32 n;
 u32 i;
 u32 pick;
@@ -117,21 +131,8 @@ u32 vA;
                 pick = 0;
                 n = self->f400->f0->f16;
                 if (n) pick = rand() % n;
-                i = 0; off = i;
-                for (; i < self->f400->f0->f16; off += 8, i++) {
-                    Str s;
-                    fn_800F6E88(&s, self->f400->f12 + off);
-                    if (fn_800F6CD0(&s, lbl_80361BD4) == 0 && (*self->f372 == 0 || (*self->f372 != 0 && i == pick))) {
-                        fn_80240B50(self, &s, *self->f364);
-                        {
-                            s32 ri = rand() % 10000u;
-                            f32 t = lbl_80361BD8 * (f32)ri;
-                            f32 d = *self->f380 - *self->f376;
-                            t = d * t + *self->f376;
-                            self->f524 = t;
-                        }
-                    }
-                }
+                pickLoop(self, 0, pick);
+
             }
         }
         if (*self->f384 != 0 && self->f528 == 0 && fn_800A1860(self)) {
