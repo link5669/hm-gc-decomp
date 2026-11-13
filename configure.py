@@ -6360,7 +6360,7 @@ config.libs = [
             Object(Matching, "auto/text_8021E3E4.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_8021E444.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_8021E4C4.cpp", extra_cflags=["-Cpp_exceptions on"]),
-            Object(NonMatching, "auto/text_8021E508.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on"]),
+            Object(Matching, "auto/text_8021E508.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on"]),
             Object(Matching, "auto/text_8021EA50.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on", "-inline auto,deferred"], mw_version="GC/2.0p1"),
             Object(Matching, "auto/text_8021EFF4.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_8021F184.cpp", extra_cflags=["-Cpp_exceptions on"], mw_version="GC/2.0p1"),
