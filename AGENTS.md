@@ -166,6 +166,8 @@ inside basic blocks**. Such functions are listed in `config/GHYE6S/schedequiv.tx
   original: every read must see the definitions the original's read sees. A read that our order moves across a write
   of its register therefore still fails. `lmw`/`stmw` are no longer barriers but a load/store of 4*(32-r) bytes that
   reads/writes r..r31 (a stack-parameter load above `stmw` passes, a load from the saved area does not).
+- **`--list` only (wYA, 2026-11-12)**: `0(rX)` with rX from `lis rX,sym@ha; addi rX,rX,sym@l` (same symbol) is a
+  global access for memory rule 'global'; other displacements are not (object size unknown before linking).
 - To link: unit `Matching`, function name into `schedequiv.txt`, then as for register-equivalent units.
   Candidates: `/home/mi/Decomp/hm-work/wYA/candidates.txt`. Do not merge into main before the user decides.
 

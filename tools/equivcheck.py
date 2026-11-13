@@ -1842,7 +1842,8 @@ class SchedCtx:
       global: base r13 / r2 (never written in the function; the address must lie in a section
       of the DOL or in its bss range, the stack is in neither), or a base register that holds,
       from a lis / lis+addi in the same block, a constant address inside those ranges. Before
-      linking (--list): an @sda21 access, or @l(rX) with rX from a relocated lis @ha.
+      linking (--list): an @sda21 access, sym@l(rX) with rX from `lis rX,sym@ha`, or 0(rX)
+      with rX from `lis rX,sym@ha; addi rX,rX,sym@l` (other displacements: object size unknown).
     Rule 'pointer': an own-frame access is disjoint from an access through ANY other base
       (also indexed) when no frame address can exist outside r1: in the original and in ours
       r1 appears only as the base of displacement loads/stores (lmw/stmw included), in the
@@ -1946,7 +1947,7 @@ def sched_dag(words, s, e, hw, rel=None, regs=True):
     mems = []
     ver = {}
     bars = []
-    const = {}                            # register -> constant it holds ('G': a relocated address)
+    const = {}                            # register -> constant, ('H', sym, addend) after lis sym@ha, ('A',) = &sym
     for p in range(m):
         w = words[s + p]
         si = sched_info(w)
@@ -1962,9 +1963,16 @@ def sched_dag(words, s, e, hw, rel=None, regs=True):
                     cls = 'F'
             else:
                 cls = 'P'
+                cb = const.get(base) if base is not None else None
                 if rl:
-                    if any(x[0] == 109 for x in rl[2]) or \
-                            (const.get(base) == 'G' and all(x[0] == 4 for x in rl[2])):
+                    # sym@sda21, or sym@l(rX) with rX = lis sym@ha (the same symbol and addend)
+                    if any(x[0] == 109 for x in rl[2]) or (
+                            isinstance(cb, tuple) and cb[0] == 'H' and len(rl[2]) == 1 and
+                            rl[2][0][0] == 4 and (rl[2][0][1], rl[2][0][3]) == cb[1:]):
+                        cls = 'G'
+                elif isinstance(cb, tuple):
+                    # rX = lis sym@ha; addi rX,rX,sym@l: the address of sym itself, displacement 0
+                    if cb[0] == 'A' and off == 0:
                         cls = 'G'
                 elif base in cx.sda:
                     if cx.isglobal((cx.sda[base] + off) & 0xFFFFFFFF, size):
@@ -2001,13 +2009,15 @@ def sched_dag(words, s, e, hw, rel=None, regs=True):
             const.pop(r, None)
         if w >> 26 == 15 and not (w >> 16) & 31:                      # lis
             rl = rel.get(s + p) if rel else None
-            const[(w >> 21) & 31] = ('G' if all(x[0] in (5, 6) for x in rl[2]) else None) if rl else \
-                (w & 0xFFFF) << 16
+            const[(w >> 21) & 31] = (('H', rl[2][0][1], rl[2][0][3]) if len(rl[2]) == 1 and rl[2][0][0] == 6
+                                     else None) if rl else (w & 0xFFFF) << 16
         elif w >> 26 == 14 and (w >> 16) & 31:                        # addi rD,rA,imm
             rl = rel.get(s + p) if rel else None
             v = None
             if rl:
-                v = 'G' if const_a == 'G' and all(x[0] == 4 for x in rl[2]) else None
+                if isinstance(const_a, tuple) and const_a[0] == 'H' and len(rl[2]) == 1 and \
+                        rl[2][0][0] == 4 and (rl[2][0][1], rl[2][0][3]) == const_a[1:]:
+                    v = ('A',)
             elif isinstance(const_a, int):
                 v = (const_a + sext(w & 0xFFFF, 16)) & 0xFFFFFFFF
             if v is not None:
@@ -2780,9 +2790,44 @@ def ret_synth():
     return bad
 
 
+def rel_synth():
+    """Hand-made cases for the classes sched_dag gives to relocated (unlinked) accesses:
+    is the frame store at word 3 still ordered with the load at word 4? Returns the number
+    of problems."""
+    def lwz(d, off, a): return 32 << 26 | d << 21 | a << 16 | (off & 0xFFFF)
+    lis6, addi6, stw48, add355, blr = 0x3CC00000, 0x38C60000, 0x90810008, 0x7C652A14, 0x4E800020
+    ha = lambda s: (0xFFFF, ((6, 0),), [(6, s, 1, 0)])
+    lo = lambda s: (0xFFFF, ((4, 0),), [(4, s, 1, 0)])
+    cases = [
+        # (name, word 2, the load, relocations, must stay ordered)
+        ('lis sym@ha; addi sym@l; 0(rX)', addi6, lwz(5, 0, 6), {1: ha('a'), 2: lo('a')}, False),
+        ('lis sym@ha; addi sym@l; 4(rX)', addi6, lwz(5, 4, 6), {1: ha('a'), 2: lo('a')}, True),
+        ('lis a@ha; addi b@l; 0(rX)', addi6, lwz(5, 0, 6), {1: ha('a'), 2: lo('b')}, True),
+        ('lis sym@ha; plain addi; 0(rX)', addi6, lwz(5, 0, 6), {1: ha('a')}, True),
+        ('plain lis; addi sym@l; 0(rX)', addi6, lwz(5, 0, 6), {2: lo('a')}, True),
+        ('lis sym@ha; addi sym@l; other base', addi6, lwz(5, 0, 7), {1: ha('a'), 2: lo('a')}, True),
+        ('no relocation at all (address 0)', addi6, lwz(5, 0, 6), {}, True),
+        ('lis sym@ha; addi sym@l; sym@l(rX)', addi6, lwz(5, 0, 6), {1: ha('a'), 2: lo('a'), 4: lo('a')}, True),
+        ('lis sym@ha; sym@l(rX)', 0x60000000, lwz(5, 0, 6), {1: ha('a'), 4: lo('a')}, False),
+        ('lis a@ha; b@l(rX)', 0x60000000, lwz(5, 0, 6), {1: ha('a'), 4: lo('b')}, True),
+        ('lis sym@ha; 0(rX)', 0x60000000, lwz(5, 0, 6), {1: ha('a')}, True),
+    ]
+    bad = 0
+    for name, w2, load, rel, want in cases:
+        words = [0x9421FFF0, lis6, w2, stw48, load, add355, 0x38210010, blr]
+        prog = Program(_Fake({0x2000 + 4 * k: w for k, w in enumerate(words)}), [('f', 0x2000, 4 * len(words))])
+        prog.dol.secs = [(0, 0x4000, 0x1000, False)]
+        cx = SchedCtx(prog, prog.byname['f'], words, words, rel, ('global',))
+        preds, _bars = sched_dag(words, 0, len(words), cx, rel)
+        ok = (3 in preds[4]) == want
+        print('%s synthetic relocated access %s: %s' % ('ok  ' if ok else 'FAIL', name, 'ordered' if 3 in preds[4] else 'free'))
+        bad += not ok
+    return bad
+
+
 def synth_run():
     """Run the hand-made cases; returns the number of problems."""
-    bad = extab_synth() + ret_synth()
+    bad = extab_synth() + ret_synth() + rel_synth()
     for name, tgt, ours, want in synth_tests():
         mem = {0x1000: 0x4E800020}
         for k, w in enumerate(tgt):
