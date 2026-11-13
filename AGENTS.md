@@ -152,6 +152,12 @@ inside basic blocks**. Such functions are listed in `config/GHYE6S/schedequiv.tx
   `lis` + `addi`/`ori` of one function that builds it) - any indirect call site that reads them. In practice this is
   conservative: a function whose callers go on to a virtual call without setting r4 still needs r4 (flips
   fn_801F4C84; fn_801A8C24 is address-taken and fn_801B1D54's callers are virtual methods that return right after it).
+- **Copies of call results and entry values (wYA, 2026-11-12)**: in the copy-forwarding model the value a register
+  has at entry, after a call or from an implicit result is now a definition site of its own per register ("the r3
+  of that call"), so `bl f; mr r31,r3` and `bl f; mr r30,r3` agree for the later readers of r31 / r30 (stale mark as
+  before when the call runs again). A third try (mode 2) does not compare a plain copy itself (`mr r28,r5; mr r29,r4`
+  against `mr r28,r4; mr r29,r5`) but every reader of the copies, and then never trusts the position of a copy as a
+  definition. A copy into another argument register or of another value is still rejected (`--selftest`).
 - To link: unit `Matching`, function name into `schedequiv.txt`, then as for register-equivalent units.
   Candidates: `/home/mi/Decomp/hm-work/wYA/candidates.txt`. Do not merge into main before the user decides.
 

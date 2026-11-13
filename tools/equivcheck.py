@@ -49,7 +49,9 @@ plain sha1 check:
      its source. So `addi r3,..; mr r31,r3` and `addi r31,..; mr r3,r31` are the same
      (the value reaches r3 and r31 from the addi in both). When a site executes again,
      every register still holding its earlier value is marked stale and is never
-     accepted this way; entry values and call results are not forwarded either.
+     accepted this way. Entry values, call results and implicit results are forwarded
+     as sites of their own per register (wYA 2026-11-12): `bl f; mr r31,r3` and
+     `bl f; mr r30,r3` both hold "r3 after that call", so later reads of r31 / r30 agree.
      A value that is live across a call therefore has to be in a callee-saved
      register in ours as well, and results are read from the ABI registers.
      Assumptions: a callee does not interpret the caller's callee-saved registers
@@ -1078,15 +1080,30 @@ class Program:
         """One instruction of the copy-forwarding model. F[r] holds the definition sites a
         register's value comes from, but a plain copy (mr rD,rS) hands on the sites of rS
         instead of being a site itself. When a site executes again, every register that
-        holds its earlier value gets the extra 'stale' bit (site shifted up by W)."""
-        grp = 0xFF << (8 * i + 1)
+        holds its earlier value gets the extra 'stale' bit (site shifted up by W).
+        A value that no instruction operand produces - the value a register has at entry,
+        what a call leaves in it, an implicit result - is a site of its own PER REGISTER
+        (wYA 2026-11-12): bit IB + r for the entry value of register r, IB + 96*(i+1) + r
+        for register r after instruction i, with IB = 2*W + 8. So a copy of r3 after a call
+        is "the r3 of that call" in whatever register it sits. These get one common stale
+        bit (IB + 96*(n+1)) when instruction i runs again."""
+        grp = 0x7F << (8 * i + 1)
+        ib = 1 << (8 * i + 8)
+        IB = 2 * W + 8
+        own = IB + 96 * (i + 1)
+        idm = ((1 << 96) - 1) << own
+        stb = 1 << (IB + 96 * ((W - 16) // 8 + 1))
         for r in range(96):
             v = F[r]
             if v & grp:
-                F[r] = v | ((v & grp) << W)
+                F[r] = v = v | ((v & grp) << W)
+            if v & idm:
+                F[r] = v | stb
         val = F[cp[1]] if cp else 0
         for idx, bit, kill in eff_i:
             if idx < 96:
+                if bit == ib:
+                    bit = 1 << (own + idx)
                 if cp and idx == cp[0]:
                     F[idx] = val
                 else:
@@ -1095,7 +1112,7 @@ class Program:
     def _fwdflow(self, eff, cps, blocks, bsucc, W):
         """Copy-forwarded definition sets at the start of every basic block."""
         IN = [None] * len(blocks)
-        IN[0] = [1] * 96
+        IN[0] = [1 << (2 * W + 8 + r) for r in range(96)]
         work = [0]
         inw = {0}
         while work:
@@ -1131,12 +1148,16 @@ class Program:
 
     def check_webs(self, fn, ours, xpairs=None):
         """Per-live-range equivalence (see the module docstring). A function that fails is
-        tried once more with copy forwarding (see _fwdflow)."""
+        tried once more with copy forwarding (see _fwdflow), and then with copy forwarding
+        where a plain copy may also read another register than the original's copy does
+        (mode 2: the copy is not checked itself; a value that may come from a copy is then
+        only ever compared through the forwarded sites, never through the copy's position)."""
         ok, text = self._check_webs(fn, ours, False, xpairs)
         if not ok and ('different value' in text or 'implicit use' in text or 'extab' in text):
-            ok2, text2 = self._check_webs(fn, ours, True, xpairs)
-            if ok2:
-                return ok2, text2
+            for mode in (True, 2):
+                ok2, text2 = self._check_webs(fn, ours, mode, xpairs)
+                if ok2:
+                    return ok2, text2
         return ok, text
 
     def _check_webs(self, fn, ours, fwd, xpairs=None):
@@ -1186,12 +1207,18 @@ class Program:
         EU = self._effects(fn, ours, idef)
         INU = self._rdflow(EU, blocks, bsucc)
         idmask = ((1 << (8 * (n + 1))) - 1) // 255     # entry + every implicit/call def site
+        cpmask = 0                                     # mode 2: the sites of the plain copies
         if fwd:
             cpo = [(RO[i][c[0]], RO[i][c[1]]) if c and RO[i][c[0]] != RO[i][c[1]] else None
                    for i, c in enumerate(CPS)]
             cpu = [(RU[i][c[0]], RU[i][c[1]]) if c and RU[i][c[0]] != RU[i][c[1]] else None
                    for i, c in enumerate(CPS)]
             FW = 8 * n + 16
+            fstale = (1 << (2 * FW + 8)) - (1 << FW) | 1 << (2 * FW + 8 + 96 * (n + 1))
+            if fwd == 2:
+                for i, c in enumerate(CPS):
+                    if cpo[i] and cpu[i]:
+                        cpmask |= 1 << (1 + 8 * i + c[0])
             FIO = self._fwdflow(EO, cpo, blocks, bsucc, FW)
             FIU = self._fwdflow(EU, cpu, blocks, bsucc, FW)
         retv = R3 | self.retuse(fn.addr)
@@ -1209,12 +1236,12 @@ class Program:
 
             def same(a, c, off=0):
                 x = so[a + off]
-                if x == su[c + off] and (a == c or not x & idmask):
+                if x == su[c + off] and (a == c or not x & idmask) and not x & cpmask:
                     return True
                 if fwd and not off:
-                    # copy-forwarded definitions: equal, all explicit, none possibly stale
+                    # copy-forwarded definitions: equal, none possibly stale
                     x, y = fo[a], fu[c]
-                    return x == y and not x & idmask and not x >> FW
+                    return x == y and not x & fstale
                 return False
 
             written = 0
@@ -1229,6 +1256,8 @@ class Program:
                             return False, 'extab names %s for the object the original keeps in %s at the call at %s' % (
                                 rname2(c), rname2(a), at)
                 rd = [k for k, o in enumerate(ops) if o[3] & (RD | SAVE)]
+                if fwd == 2 and cpo[i] and cpu[i]:
+                    rd = []                 # a plain copy: its readers are checked instead
                 bad = [k for k in rd if not same(ro[k], ru[k])]
                 if bad:
                     cp = comm(wo)
@@ -2508,6 +2537,7 @@ def synth_tests():
     def mr(d, sr): return 31 << 26 | sr << 21 | d << 16 | sr << 11 | 444 << 1
     def add(d, a, b): return 31 << 26 | d << 21 | a << 16 | b << 11 | 266 << 1
     def cmpwi(a, i): return 11 << 26 | a << 16 | i
+    def subf(d, a, b): return 31 << 26 | d << 21 | a << 16 | b << 11 | 40 << 1
     def bl(off): return 18 << 26 | (off & 0x3FFFFFC) | 1
     def bc(bo, bi, off): return 16 << 26 | bo << 21 | bi << 16 | (off & 0xFFFC)
     blr = 0x4E800020
@@ -2531,6 +2561,39 @@ def synth_tests():
                                add(3, 5, 5), blr], False),
         ('copy of a copy', [addi(3, 4, 8), mr(31, 3), mr(30, 31), bl(g - 0x200C), mr(3, 30), blr],
                            [addi(30, 4, 8), mr(31, 30), mr(3, 31), bl(g - 0x200C), mr(3, 30), blr], True),
+        # call results and entry values are sites per register (wYA 2026-11-12)
+        ('copies of call results in other registers',
+         [bl(g - 0x2000), mr(5, 3), mr(6, 4), subf(3, 5, 6), blr],
+         [bl(g - 0x2000), mr(6, 3), mr(5, 4), subf(3, 6, 5), blr], True),
+        ('copies of call results exchanged',
+         [bl(g - 0x2000), mr(5, 3), mr(6, 4), subf(3, 5, 6), blr],
+         [bl(g - 0x2000), mr(6, 3), mr(5, 4), subf(3, 5, 6), blr], False),
+        ('copy of another call result',
+         [bl(g - 0x2000), mr(5, 3), addi(3, 5, 1), blr],
+         [bl(g - 0x2000), mr(5, 4), addi(3, 5, 1), blr], False),
+        ('copy of the result of another call',
+         [bl(g - 0x2000), mr(5, 3), mr(6, 3), addi(3, 5, 1), blr],
+         [bl(g - 0x2000), mr(5, 3), mr(6, 3), addi(3, 6, 1), blr], True),
+        ('copies of entry values made in the other order',
+         [mr(5, 3), mr(6, 4), subf(3, 5, 6), blr],
+         [mr(5, 4), mr(6, 3), subf(3, 6, 5), blr], True),
+        ('copies of entry values exchanged',
+         [mr(5, 3), mr(6, 4), subf(3, 5, 6), blr],
+         [mr(5, 4), mr(6, 3), subf(3, 5, 6), blr], False),
+        ('copy of another entry value returned', [mr(3, 5), blr], [mr(3, 4), blr], False),
+        ('copy into another argument register', [mr(3, 31), bl(g - 0x2004), blr],
+                                                [mr(4, 31), bl(g - 0x2004), blr], False),
+        ('copy of another register into the argument', [mr(3, 31), bl(g - 0x2004), blr],
+                                                       [mr(3, 30), bl(g - 0x2004), blr], False),
+        ('argument copies through exchanged temporaries',
+         [mr(11, 3), mr(12, 4), mr(3, 12), mr(4, 11), bl(g - 0x2010), blr],
+         [mr(12, 3), mr(11, 4), mr(3, 11), mr(4, 12), bl(g - 0x2010), blr], True),
+        ('argument copies, values exchanged',
+         [mr(11, 3), mr(12, 4), mr(3, 12), mr(4, 11), bl(g - 0x2010), blr],
+         [mr(12, 3), mr(11, 4), mr(3, 12), mr(4, 11), bl(g - 0x2010), blr], False),
+        ('entry value read after its register was reused',
+         [mr(5, 3), addi(3, 4, 1), add(3, 3, 5), blr],
+         [mr(5, 3), addi(3, 4, 1), add(3, 3, 3), blr], False),
     ]
     out = []
     for name, tgt, ours, want in cases:
@@ -2679,7 +2742,16 @@ def synth_run():
     Program._fwdstep(F, [(5, 1 << 1, True)], None, 0, W)
     stale = F[5] == 2 and F[6] == 2 | 2 << W
     print('%s synthetic stale marking' % ('ok  ' if fresh and stale else 'FAIL'))
-    return bad + (0 if fresh and stale else 1)
+    # the same for a call result: instruction 0 is a call that leaves a value in r3
+    F = [1 << (2 * W + 8 + r) for r in range(96)]
+    own, stb = 1 << (2 * W + 8 + 96 + 3), 1 << (2 * W + 8 + 96 * ((W - 16) // 8 + 1))
+    Program._fwdstep(F, [(3, 1 << 8, True)], None, 0, W)
+    Program._fwdstep(F, [(6, 1 << 9, True)], (6, 3), 1, W)
+    fresh2 = F[6] == F[3] == own
+    Program._fwdstep(F, [(3, 1 << 8, True)], None, 0, W)
+    stale2 = F[3] == own and F[6] == own | stb
+    print('%s synthetic stale marking of a call result' % ('ok  ' if fresh2 and stale2 else 'FAIL'))
+    return bad + (0 if fresh and stale else 1) + (0 if fresh2 and stale2 else 1)
 
 
 def _benign_copy_alias(words, i, old, new):
@@ -3168,6 +3240,52 @@ def sched_selftest(args, P, prog, units):
     return bad
 
 
+def _benign_copy_eq(fn, words, i, old, new):
+    """Independent check used only by the self-test, for copies made in another block: True
+    if `new` differs from `old` in one GPR that is read, and on EVERY path to instruction i
+    the two registers are known to be equal because one was copied from the other (mr /
+    ori rA,rS,0) and neither was written since (a call writes the volatile registers).
+    A forward must-analysis over the control-flow graph, on the decoder only."""
+    d = dec(old)
+    if d is None or dec(new) is None:
+        return False
+    pair = None
+    for base, sh, wd, role in d[0]:
+        x, y = (old >> sh) & ((1 << wd) - 1), (new >> sh) & ((1 << wd) - 1)
+        if x != y:
+            if pair or base != GP or not role & RD or role & WR:
+                return False
+            pair = frozenset((x, y))
+    if not pair or (old ^ new) & ~d[7] & 0xFFFFFFFF:
+        return False
+    n = len(words)
+    state = [None] * n                     # set of frozenset({x, y}) known equal before i
+    state[0] = frozenset()
+    work = [0]
+    while work:
+        j = work.pop()
+        w = words[j]
+        dj = dec(w)
+        if dj is None:
+            return False
+        wr = set(r for r in regbits(dj[2]) if r < 32)
+        for base, sh, wd, role in dj[0]:
+            if base == GP and role & WR:
+                wr.add((w >> sh) & 31)
+        if j in fn.call:
+            wr.update(regbits(VOL & 0xFFFFFFFF))
+        out = set(p for p in state[j] if not p & wr)
+        if copy_of(w) and w >> 26 in (31, 24) and (w >> 16) & 31 != (w >> 21) & 31:
+            out.add(frozenset(((w >> 16) & 31, (w >> 21) & 31)))
+        out = frozenset(out)
+        for t_ in fn.succ[j]:
+            new_ = out if state[t_] is None else state[t_] & out
+            if new_ != state[t_]:
+                state[t_] = new_
+                work.append(t_)
+    return state[i] is not None and pair in state[i]
+
+
 def selftest(args, P):
     prog = load_program(args, P)
     prog.strict = False
@@ -3225,7 +3343,8 @@ def selftest(args, P):
                 rej[kind] = rej.get(kind, 0) + 1
                 key = re.sub(r'\b(at|vs) [0-9a-f]{8}|\b[rf]\d+\b|\bcr\d\b|\(.*\)', '', text_).strip()
                 reasons[key] = reasons.get(key, 0) + 1
-            elif kind == 'operand' and _benign_copy_alias(ours, i, ours[i], x):
+            elif kind == 'operand' and (_benign_copy_alias(ours, i, ours[i], x) or
+                                        _benign_copy_eq(fn, ours, i, ours[i], x)):
                 # the "corrupted" operand names a register that provably holds a plain copy
                 # (mr) of the original operand at this point, so the program is unchanged;
                 # verified by an independent straight-line scan, not by the checker itself
