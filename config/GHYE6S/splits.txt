@@ -25290,6 +25290,7 @@ auto/text_801F4C84.cpp:
 	extab       start:0x80012AA4 end:0x80012AAC
 	extabindex  start:0x800257B4 end:0x800257C0
 	.text       start:0x801F4C84 end:0x801F5108
+	.sdata2     start:0x803654B8 end:0x803654C0
 
 auto/text_801F5108.cpp:
 	extab       start:0x80012AAC end:0x80012AB4
