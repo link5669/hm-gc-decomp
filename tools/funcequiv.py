@@ -2164,6 +2164,15 @@ def selftest(args, P):
     FPCOMM = args.fp_commute
     print('  %d mutations of proved real functions, %d accepted' % (mut, acc))
     bad += acc
+    print('differential runs of the drafts in unicorn (must not differ)')
+    for name, (mode, hexw) in FIXTURES.items():
+        fn = prog.byname[name]
+        ours = [int(hexw[k:k + 8], 16) for k in range(0, len(hexw), 8)]
+        done, part, skipped, diff = fuzz_pair(prog, fn, ours, (), seeds=25, retuse=env.retuse(fn.addr),
+                                              inputs_of=env.inputs_of)
+        print('  %-22s %d runs compared, %d by their calls only, %d not comparable%s' % (
+            name, done, part, skipped, ': DIFFERENT (%s)' % diff if diff else ''))
+        bad += bool(diff) or not done + part
     print('selftest: %s' % ('OK' if not bad else 'FAILED (%d)' % bad))
     return 1 if bad else 0
 
@@ -2306,10 +2315,12 @@ def fuzz_pair(prog, fn, ours, fakes, seeds=40, steps=20000, retuse=0, inputs_of=
                 regs.append(uc.reg_read(U.UC_PPC_REG_FPR0 + 1))
             return (list(self.events), regs, dict(self.writes)), None
 
-    mo, mu = Machine(fn.words), Machine(ours)
     done = part = skipped = 0
     why = fuzz_pair.why = {}
     for seed in range(seeds):
+        # A new machine for every run: CR, XER, FPSCR and the translation cache of the last
+        # run would otherwise leak into this one (they differ between the two versions).
+        mo, mu = Machine(fn.words), Machine(ours)
         a, ea = mo.run(seed)
         b, eb = mu.run(seed)
         if a is not None and b is not None:
