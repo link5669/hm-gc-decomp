@@ -171,6 +171,33 @@ inside basic blocks**. Such functions are listed in `config/GHYE6S/schedequiv.tx
 - To link: unit `Matching`, function name into `schedequiv.txt`, then as for register-equivalent units.
   Candidates: `/home/mi/Decomp/hm-work/wYA/candidates.txt`. Do not merge into main before the user decides.
 
+### Function-equivalent matches (EXPERIMENT, branch `sched-equiv` only, wTL 2026-11-13)
+
+A function whose code differs from the original beyond registers and block-local order (other schedule across
+blocks, different instruction selection, ...) may still be linked if `tools/funcequiv.py` PROVES it computes the same
+thing: symbolic execution with z3, cut point to cut point (entry, loop headers, calls, returns), proving that every
+call gets the same inputs, and that return values, callee-saved registers and all stores agree. It needs z3 + unicorn:
+`/home/mi/Decomp/hm-work/venv-tv/bin/python tools/funcequiv.py ...`.
+- List the function in `config/GHYE6S/funcequiv.txt` (one name per line) and set the unit `Matching`. Same size only
+  (the DOL must stay identical outside the listed functions), so a function whose size differs cannot be linked;
+  its unit also needs its own `.sdata2`/`.rodata` split when it owns read-only literals.
+- `python3 tools/equivcheck.py` (what `safecommit` runs) hands the differing functions of that list to
+  `funcequiv.py --policy --dolcheck <main.dol>` (z3 interpreter: the current one, else `FUNCEQUIV_PYTHON`, else the
+  venv above) which proves the LINKED words against the original. Anything else (no interpreter, crash, timeout,
+  unsupported instruction) fails closed. A proof takes seconds to ~3 minutes per function.
+- Try a draft first: `funcequiv.py --list <unit>|<unit>:<fn>|<fn> [--policy] [--debug]` (our `.o` against the DOL, no
+  link), `--check` (every listed fn), `--fuzz <fn>` (unicorn differential run, a sanity check only), `--selftest`.
+- `--policy` = `--frame --fp-commute --leftover`: the assumptions rules d/f already make (own-frame accesses apart from
+  globals when no frame address escapes, fadd/fmul operands commutative, a volatile register a call leaves behind is
+  garbage unless the function reads it). Strict mode (no policy) needs none of them. Not supported (rejected): bctr
+  jump tables, paired-single arithmetic, mffs/mtfsf, hardware addresses, other frame layout.
+- Assumption note (wTL): `fn_80034AFC`, `fn_80066714` (collab units, schedequiv) and `fn_80189BA4` pass equivcheck only
+  under the "leftover volatile register" assumption: a stale f4/f7 reaches a callee that whole-program liveness says
+  "may read" it, because the call chain ends in an indirect call (assumed to read f1-f8). The real callees read no
+  FP argument (`fn_80264AC0` takes r3-r10; the virtual call is `(obj*, u8*)`) and `wDT/difftest.py` (callee-specific
+  argument sets) finds no difference, so they stay linked; unicorn runs that hand every f1-f8 to every indirect
+  callee see a "difference" by construction.
+
 ## Tools (tools/decomp_agent/)
 
 Copy them into a scratch dir and run from there. Scripts locate each other through `$DECOMP_SCRATCH`:

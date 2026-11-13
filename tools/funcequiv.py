@@ -2177,6 +2177,32 @@ def selftest(args, P):
     return 1 if bad else 0
 
 
+def dolcheck(args, P):
+    """--dolcheck DOL FN...: prove the words of FN in the linked DOL against the original's (hook of
+    equivcheck.py for the functions of funcequiv.txt). Same size only (the DOL is identical outside
+    the functions it lists). Prints 'PASS|FAIL fn: text'."""
+    dol_path, names = args.dolcheck[0], args.dolcheck[1:]
+    prog, env, secs, units = setup(P)
+    dol = E.Dol(dol_path)
+    rc = 0
+    for name in names:
+        fn = prog.byname.get(name)
+        if fn is None:
+            print('FAIL %s: unknown function' % name)
+            rc = 1
+            continue
+        ours = list(dol.words(fn.addr, 4 * fn.n))
+        if ours == list(fn.words):
+            print('PASS %s: exact' % name)
+            continue
+        ok, text_ = check_pair(env, fn.addr, fn.words, ours, limit=args.limit, frame=args.frame,
+                               leftover=args.leftover, ro=RoData(prog))
+        print('%s %s: %s' % ('PASS' if ok else 'FAIL', name, text_))
+        sys.stdout.flush()
+        rc |= not ok
+    return rc
+
+
 def dump(args, P):
     prog, env, secs, units = setup(P)
     for name in args.dump:
@@ -2372,6 +2398,7 @@ def main():
     ap.add_argument('--fuzz', nargs='+', metavar='FN',
                     help='run the original and ours in unicorn on random states and compare calls, results and '
                          'memory (sanity check of the prover, no proof)')
+    ap.add_argument('--dolcheck', nargs='+', metavar='DOL_OR_FN', help='DOL then functions: prove the linked DOL (hook)')
     ap.add_argument('--seeds', type=int, default=40)
     ap.add_argument('--limit', type=int, default=120, help='seconds per function')
     ap.add_argument('-v', '--verbose', action='store_true')
@@ -2393,6 +2420,8 @@ def main():
     P = paths(args.version)
     if args.selftest:
         sys.exit(selftest(args, P))
+    if args.dolcheck:
+        sys.exit(dolcheck(args, P))
     if args.dump:
         sys.exit(dump(args, P))
     if args.fuzz:

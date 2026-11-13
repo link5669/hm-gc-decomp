@@ -1593,6 +1593,38 @@ class Extab:
         return dol.data[off:off + n]
 
 
+FUNCEQUIV_PY = '/home/mi/Decomp/hm-work/venv-tv/bin/python'
+
+
+def funcequiv_hook(P, names):
+    """Functions listed in config/<v>/funcequiv.txt: tools/funcequiv.py (z3, own interpreter) proves
+    the linked DOL's words equal in function to the original's. Fails closed: any problem
+    (no interpreter, crash, timeout, missing line) means 'not proved'. -> {name: (ok, text)}."""
+    import subprocess
+    py = os.environ.get('FUNCEQUIV_PYTHON') or FUNCEQUIV_PY
+    try:
+        import z3  # noqa: F401
+        if not os.environ.get('FUNCEQUIV_PYTHON'):
+            py = sys.executable
+    except ImportError:
+        pass
+    if not os.path.exists(py):
+        return {n: (False, 'no interpreter with z3 (%s); set FUNCEQUIV_PYTHON' % py) for n in names}
+    cmd = [py, os.path.join(ROOT, 'tools', 'funcequiv.py'), '--version', os.path.basename(P['build']),
+           '--policy', '--limit', '300', '--dolcheck', P['dol']] + list(names)
+    try:
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True,
+                           timeout=400 * len(names) + 200)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return {n: (False, 'funcequiv.py did not finish (%s)' % type(e).__name__) for n in names}
+    res = {}
+    for line in r.stdout.splitlines():
+        m = re.match(r'(PASS|FAIL) (\S+): (.*)$', line)
+        if m and m.group(2) in names:
+            res[m.group(2)] = (m.group(1) == 'PASS' and r.returncode == 0, m.group(3))
+    return res
+
+
 def check_dol(args, P):
     orig = Dol(P['orig'])
     if not os.path.exists(P['dol']):
@@ -1630,6 +1662,8 @@ def check_dol(args, P):
     allow = set(load_allow(P['allow']))
     sallow = set(load_allow(P['sallow']))
     allow |= sallow
+    fallow = set(load_allow(P['fallow'])) if 'fallow' in P else set()
+    allow |= fallow
     n = tsize // 4
     wo = struct.unpack('>%dI' % n, orig.data[toff:toff + tsize])
     wu = struct.unpack('>%dI' % n, ours.data[toff:toff + tsize])
@@ -1647,6 +1681,7 @@ def check_dol(args, P):
     prog.noscan = [extab_ranges(P)[2:]]
     prog.strict = args.strict
     npass = nsched = 0
+    fcheck = []
     for x in sorted(exd):               # functions whose extab entry differs must be listed, and are checked
         for f in ex.x_fns.get(x, ()):
             fn = prog.fns.get(f)
@@ -1670,6 +1705,9 @@ def check_dol(args, P):
                 print('FAIL %s: %s' % (name, why))
                 bad += 1
                 continue
+        if name in fallow and name not in sallow and not args.strict:
+            fcheck.append(name)         # proved below, all together, by tools/funcequiv.py
+            continue
         if name in sallow and not args.strict:
             ok, text_ = check_sched(prog, fn, ours.words(fn.addr, 4 * fn.n), xpairs)
         else:
@@ -1681,12 +1719,27 @@ def check_dol(args, P):
             npass += 1
         else:
             bad += 1
+    nfunc = 0
+    if fcheck:
+        res = funcequiv_hook(P, fcheck)
+        for name in fcheck:
+            ok, text_ = res.get(name, (False, 'no result from funcequiv.py'))
+            print('%s %s: funcequiv %s' % ('PASS' if ok else 'FAIL', name, text_))
+            if ok:
+                npass += 1
+                nfunc += 1
+            else:
+                bad += 1
     for name in sorted(allow - set(touched)):
         print('note %s: listed in %s but exact (or unknown); entry can be removed' % (
-            name, 'schedequiv.txt' if name in sallow else 'regequiv.txt'))
+            name, 'funcequiv.txt' if name in fallow else 'schedequiv.txt' if name in sallow else 'regequiv.txt'))
     if bad:
         print('FAIL: %d violation(s)' % bad)
         return 1
+    if nfunc:
+        print('OK: main.dol is equivalent to the original (%d function(s) by register renaming, %d also by instruction '
+              'order, %d proved functionally equivalent by funcequiv.py)' % (npass - nsched - nfunc, nsched, nfunc))
+        return 0
     if nsched:
         print('OK: main.dol is register/schedule-equivalent to the original (%d function(s) differ by register '
               'renaming only, %d also by instruction order inside basic blocks)' % (npass - nsched, nsched))
@@ -3537,6 +3590,7 @@ def main():
         'splits': os.path.join(ROOT, 'config', v, 'splits.txt'),
         'allow': os.path.join(ROOT, 'config', v, 'regequiv.txt'),
         'sallow': os.path.join(ROOT, 'config', v, 'schedequiv.txt'),
+        'fallow': os.path.join(ROOT, 'config', v, 'funcequiv.txt'),
     }
     if args.selftest is not None:
         sys.exit(selftest(args, P))

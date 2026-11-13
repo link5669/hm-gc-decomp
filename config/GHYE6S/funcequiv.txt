@@ -4,3 +4,4 @@
 # callee-saved registers). One function name per line; `funcequiv.py --check` proves each of them
 # again from build/GHYE6S/src/<unit>.o. Nothing here is consulted by the link or by
 # tools/equivcheck.py yet (2026-11-12, wTV): the list is empty until the candidates are reviewed.
+fn_801718AC
