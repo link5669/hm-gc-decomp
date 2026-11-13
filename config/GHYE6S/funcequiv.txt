@@ -5,3 +5,7 @@
 # again from build/GHYE6S/src/<unit>.o. Nothing here is consulted by the link or by
 # tools/equivcheck.py yet (2026-11-12, wTV): the list is empty until the candidates are reviewed.
 fn_801718AC
+fn_801737D8
+fn_801B6B9C
+fn_801B7254
+fn_801F4B44
