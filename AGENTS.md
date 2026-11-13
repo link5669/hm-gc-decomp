@@ -158,6 +158,14 @@ inside basic blocks**. Such functions are listed in `config/GHYE6S/schedequiv.tx
   before when the call runs again). A third try (mode 2) does not compare a plain copy itself (`mr r28,r5; mr r29,r4`
   against `mr r28,r4; mr r29,r5`) but every reader of the copies, and then never trusts the position of a copy as a
   definition. A copy into another argument register or of another value is still rejected (`--selftest`).
+- **Rule f, second form: other registers AND another order (wYA, 2026-11-12, `_check_sched(regs=False)`)**: when
+  our block is not a reordering of the original's instructions under OUR register numbers (ours reuses one register
+  where the original keeps two values in two registers, or the other way round), the registers are taken out of the
+  dependency graph (it keeps memory, XER[CA], FPSCR bits and barriers) and rule d) is applied with the reaching
+  definitions of ours computed in OUR order, a definition being named by the position of its instruction in the
+  original: every read must see the definitions the original's read sees. A read that our order moves across a write
+  of its register therefore still fails. `lmw`/`stmw` are no longer barriers but a load/store of 4*(32-r) bytes that
+  reads/writes r..r31 (a stack-parameter load above `stmw` passes, a load from the saved area does not).
 - To link: unit `Matching`, function name into `schedequiv.txt`, then as for register-equivalent units.
   Candidates: `/home/mi/Decomp/hm-work/wYA/candidates.txt`. Do not merge into main before the user decides.
 

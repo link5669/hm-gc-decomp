@@ -1035,12 +1035,13 @@ class Program:
         return eff
 
     @staticmethod
-    def _rdflow(eff, blocks, bsucc):
-        """Reaching definitions at the start of every basic block."""
+    def _rdflow(eff, blocks, bsucc, uord=None):
+        """Reaching definitions at the start of every basic block. uord: the order in which
+        the instructions (their indexes) run when that is not the index order."""
         summ = []
         for s, e in blocks:
             d = {}
-            for i in range(s, e):
+            for i in (uord[s:e] if uord else range(s, e)):
                 for idx, bit, kill in eff[i]:
                     if kill:
                         d[idx] = (bit, True)
@@ -1109,7 +1110,7 @@ class Program:
                 else:
                     F[idx] = bit if kill else F[idx] | bit
 
-    def _fwdflow(self, eff, cps, blocks, bsucc, W):
+    def _fwdflow(self, eff, cps, blocks, bsucc, W, uord=None):
         """Copy-forwarded definition sets at the start of every basic block."""
         IN = [None] * len(blocks)
         IN[0] = [1 << (2 * W + 8 + r) for r in range(96)]
@@ -1119,7 +1120,7 @@ class Program:
             b = work.pop()
             inw.discard(b)
             out = IN[b][:]
-            for i in range(*blocks[b]):
+            for i in (uord[blocks[b][0]:blocks[b][1]] if uord else range(*blocks[b])):
                 self._fwdstep(out, eff[i], cps[i], i, W)
             for t in bsucc[b]:
                 cur = IN[t]
@@ -1146,27 +1147,35 @@ class Program:
             return self.check_strict(fn, ours)
         return self.check_webs(fn, ours, xpairs)
 
-    def check_webs(self, fn, ours, xpairs=None):
+    def check_webs(self, fn, ours, xpairs=None, uord=None):
         """Per-live-range equivalence (see the module docstring). A function that fails is
         tried once more with copy forwarding (see _fwdflow), and then with copy forwarding
         where a plain copy may also read another register than the original's copy does
         (mode 2: the copy is not checked itself; a value that may come from a copy is then
         only ever compared through the forwarded sites, never through the copy's position)."""
-        ok, text = self._check_webs(fn, ours, False, xpairs)
+        ok, text = self._check_webs(fn, ours, False, xpairs, uord)
         if not ok and ('different value' in text or 'implicit use' in text or 'extab' in text):
             for mode in (True, 2):
-                ok2, text2 = self._check_webs(fn, ours, mode, xpairs)
+                ok2, text2 = self._check_webs(fn, ours, mode, xpairs, uord)
                 if ok2:
                     return ok2, text2
         return ok, text
 
-    def _check_webs(self, fn, ours, fwd, xpairs=None):
+    def _check_webs(self, fn, ours, fwd, xpairs=None, uord=None):
+        """ours: our instructions at the positions of their counterparts in the original.
+        uord (rule f, second form): the order in which OURS runs them, as a list of those
+        positions (a permutation inside every basic block); None = the same order. The
+        definitions that reach an instruction are then computed for the original in its
+        order and for ours in our order, a definition site being the position of the
+        instruction in the original for both."""
         orig = fn.words
         n = fn.n
         if len(ours) != n:
             return False, 'length differs'
         xdiff = bool(xpairs) and any(a != b for v in xpairs.values() for a, b in v)
-        if ours == orig and not xdiff:
+        if uord is not None and uord == list(range(n)):
+            uord = None
+        if ours == orig and not xdiff and uord is None:
             return True, 'exact'
         why = self.unsupported(fn)
         if why:
@@ -1205,7 +1214,7 @@ class Program:
             fn.rd = self._rdflow(eo, blocks, bsucc), eo
         INO, EO = fn.rd
         EU = self._effects(fn, ours, idef)
-        INU = self._rdflow(EU, blocks, bsucc)
+        INU = self._rdflow(EU, blocks, bsucc, uord)
         idmask = ((1 << (8 * (n + 1))) - 1) // 255     # entry + every implicit/call def site
         cpmask = 0                                     # mode 2: the sites of the plain copies
         if fwd:
@@ -1220,7 +1229,7 @@ class Program:
                     if cpo[i] and cpu[i]:
                         cpmask |= 1 << (1 + 8 * i + c[0])
             FIO = self._fwdflow(EO, cpo, blocks, bsucc, FW)
-            FIU = self._fwdflow(EU, cpu, blocks, bsucc, FW)
+            FIU = self._fwdflow(EU, cpu, blocks, bsucc, FW, uord)
         retv = R3 | self.retuse(fn.addr)
         moved = {}
         swaps = 0
@@ -1233,6 +1242,16 @@ class Program:
 
             if fwd:
                 fo, fu = FIO[b][:], FIU[b][:]
+            snaps = None
+            if uord and uord[s:e] != list(range(s, e)):
+                # our state in front of every instruction, in the order we run them
+                snaps = {}
+                for i in uord[s:e]:
+                    snaps[i] = (su[:], fu[:] if fwd else None)
+                    for idx, bit, kill in EU[i]:
+                        su[idx] = bit if kill else su[idx] | bit
+                    if fwd:
+                        self._fwdstep(fu, EU[i], cpu[i], i, FW)
 
             def same(a, c, off=0):
                 x = so[a + off]
@@ -1250,6 +1269,8 @@ class Program:
                 wo = orig[i]
                 ops = dec(wo)[0]
                 ro, ru = RO[i], RU[i]
+                if snaps:
+                    su, fu = snaps[i]
                 if xpairs and i in xpairs:
                     for a, c in xpairs[i]:
                         if not same(a, c):
@@ -1299,10 +1320,13 @@ class Program:
                         moved[key] = moved.get(key, 0) + 1
                 for idx, bit, kill in EO[i]:
                     so[idx] = bit if kill else so[idx] | bit
+                if fwd:
+                    self._fwdstep(fo, EO[i], cpo[i], i, FW)
+                if snaps:
+                    continue
                 for idx, bit, kill in EU[i]:
                     su[idx] = bit if kill else su[idx] | bit
                 if fwd:
-                    self._fwdstep(fo, EO[i], cpo[i], i, FW)
                     self._fwdstep(fu, EU[i], cpu[i], i, FW)
         txt = ' '.join('%s->%s(%d)' % (rname2(o), rname2(u), c) for (o, u), c in sorted(moved.items()))
         if swaps:
@@ -1692,8 +1716,13 @@ def check_dol(args, P):
 #           hardware address (lis 0xCC00/0xCD00/0xE000) loads keep their order too;
 #         - barriers keep their position and nothing crosses them: branches, calls,
 #           returns, mtspr/mfspr (mflr, mtctr, ...), mfmsr/mtmsr, mftb, mfcr/mtcrf, CR
-#           logic, isync/sync, the cache instructions, lmw/stmw, OE forms, mffs/mtfsf/
-#           mtfsb, record forms of float instructions.
+#           logic, isync/sync, the cache instructions, OE forms, mffs/mtfsf/mtfsb, record
+#           forms of float instructions. (lmw/stmw were barriers until 2026-11-12; now
+#           they are a load / store of 4*(32-r) bytes that reads / writes r..r31.)
+#      Second form (wYA 2026-11-12, _check_sched with regs=False): when no such permutation
+#      exists because ours and the original use their registers differently AND run in
+#      another order, the registers are left out of the graph and rule d) is applied with
+#      the reaching definitions of ours taken in our own order.
 #    Two orders of the same dependency graph compute the same registers and memory, and
 #    the permuted function is the original up to rule d), so ours is equivalent.
 
@@ -1760,8 +1789,11 @@ def _sched_info(w):
             bar = True
     elif 32 <= op <= 45:
         mem = (not (op < 36 or 40 <= op <= 43), A if A else -1, sext(w & 0xFFFF, 16), MEMSZ[op])
-    elif op in (46, 47):
-        bar = True
+    elif op in (46, 47):                  # lmw / stmw: a load / store of 4*(32-r) bytes
+        first = (w >> 21) & 31
+        if op == 47:
+            rd.update(range(first, 32))   # also in a prologue, where dec() does not count them
+        mem = (op == 47, A if A else -1, sext(w & 0xFFFF, 16), 4 * (32 - first))
     elif 48 <= op <= 55:
         mem = (op >= 52, A if A else -1, sext(w & 0xFFFF, 16), MEMSZ[op])
     elif op in (56, 57, 60, 61):
@@ -1902,7 +1934,7 @@ class SchedCtx:
         return bool(b) and b[0] <= addr and addr + size <= b[0] + b[1]
 
 
-def sched_dag(words, s, e, hw, rel=None):
+def sched_dag(words, s, e, hw, rel=None, regs=True):
     """Dependency graph of the block words[s:e]: (preds, barriers) with preds[p] = set of
     block positions that must stay before p; None when an instruction is unknown."""
     m = e - s
@@ -1941,7 +1973,8 @@ def sched_dag(words, s, e, hw, rel=None):
                     if cx.isglobal((const[base] + off) & 0xFFFFFFFF, size):
                         cls = 'G'
         for r in rd:
-            events.setdefault(r, []).append((p, False))
+            if regs or r >= 96:
+                events.setdefault(r, []).append((p, False))
         events.setdefault(BAR, []).append((p, False))
         if mem:
             st, base, off, size = mem
@@ -1962,7 +1995,8 @@ def sched_dag(words, s, e, hw, rel=None):
             mems.append((p, st, key, off, size, cls))
         const_a = const.get((w >> 16) & 31)
         for r in wr:
-            events.setdefault(r, []).append((p, True))
+            if regs or r >= 96:
+                events.setdefault(r, []).append((p, True))
             ver[r] = ver.get(r, 0) + 1
             const.pop(r, None)
         if w >> 26 == 15 and not (w >> 16) & 31:                      # lis
@@ -2129,7 +2163,7 @@ def rel_compat(a, b, symaddr):
     return loose
 
 
-def sched_match(orig, ours, s, e, hw, rel=None, symaddr=None):
+def sched_match(orig, ours, s, e, hw, rel=None, symaddr=None, regs=True):
     """A permutation perm (perm[j] = position in our block of the instruction that goes to
     position j of the original block) that respects the dependencies of OUR block:
     (perm, preds, bars, loose) or (None, reason, None, 0)."""
@@ -2144,7 +2178,7 @@ def sched_match(orig, ours, s, e, hw, rel=None, symaddr=None):
         cnt[k] = cnt.get(k, 0) - 1
     if any(cnt.values()):
         return None, 'the block does not hold the same instructions', None, 0
-    dag = sched_dag(ours, s, e, hw, urel)
+    dag = sched_dag(ours, s, e, hw, urel, regs)
     if dag is None:
         return None, 'unknown instruction', None, 0
     preds, bars = dag
@@ -2205,12 +2239,36 @@ def check_sched(prog, fn, ours, xpairs=None, rel=None, relax=None):
         return False, why
     blocks = prog._webinfo(fn)[0]
     hw = SchedCtx(prog, fn, orig, ours, rel[1] if rel else None, relax)
+    ok, text = _check_sched(prog, fn, ours, xpairs, rel, blocks, hw, True)
+    if not ok:
+        # second form (wYA 2026-11-12): registers by reaching definitions instead of by the
+        # dependency graph of our register numbers, see _check_sched
+        ok2, text2 = _check_sched(prog, fn, ours, xpairs, rel, blocks, hw, False)
+        if ok2:
+            return ok2, text2
+    return ok, text
+
+
+def _check_sched(prog, fn, ours, xpairs, rel, blocks, hw, regs):
+    """One attempt of rule f). regs=True: our order and the original order must be two
+    orders of the dependency graph of OUR block including our register numbers, and our
+    instructions in the original order must pass rule d).
+    regs=False: the graph only holds what rule d) does not follow (memory, XER[CA], the
+    FPSCR bits, barriers). The registers are checked by rule d) itself with the reaching
+    definitions of ours computed in OUR order (Program._check_webs with uord): every read
+    must see the definitions the original's read sees, a definition being named by the
+    position of its instruction in the original. So ours may reuse one register where the
+    original keeps two values in two registers at once, and the other way round; a read
+    that our order moves across a write of its register sees another definition and fails."""
+    orig = fn.words
+    n = fn.n
     new = list(ours)
+    uord = list(range(n))
     moved = nb = loose = 0
     for s, e in blocks:
         if rel is None and orig[s:e] == ours[s:e]:
             continue
-        perm, preds, bars, lo = sched_match(orig, ours, s, e, hw, rel, getattr(prog, 'symaddr', None))
+        perm, preds, bars, lo = sched_match(orig, ours, s, e, hw, rel, getattr(prog, 'symaddr', None), regs)
         if perm is None:
             return False, 'sched: %s (block %08x-%08x)' % (preds, fn.addr + 4 * s, fn.addr + 4 * e)
         # independent re-check of what sched_match promises
@@ -2224,6 +2282,7 @@ def check_sched(prog, fn, ours, xpairs=None, rel=None, relax=None):
             return False, 'sched: internal error (dependency not respected)'
         loose += lo
         for j, k in enumerate(perm):
+            uord[s + k] = s + j
             w = ours[s + k]
             if rel and s + j in rel[0]:
                 mask = rel[0][s + j][0]
@@ -2233,14 +2292,15 @@ def check_sched(prog, fn, ours, xpairs=None, rel=None, relax=None):
         if d:
             moved += d
             nb += 1
-    ok, text = prog.check_webs(fn, new, xpairs)
+    ok, text = prog.check_webs(fn, new, xpairs, None if regs else uord)
     if not ok:
         return False, ('sched: after reordering %d instruction(s): ' % moved if moved else '') + text
     if loose:
         text += ' [%d local relocation target(s) not compared by name]' % loose
     if not moved:
         return True, text
-    return True, 'schedequiv %d instruction(s) reordered in %d block(s); %s' % (moved, nb, text)
+    return True, 'schedequiv %d instruction(s) reordered in %d block(s)%s; %s' % (
+        moved, nb, '' if regs else ' (registers by reaching definitions)', text)
 
 
 def obj_rel(prog, name, mine, tgt):
@@ -2949,6 +3009,51 @@ def sched_synth():
         ('memory: r13 written in the function',
          [stwu, stw(4, 8, 1), lwz(5, -0x100, 13), add(3, 5, 5), addi(13, 13, 0), pop, blr],
          [stwu, lwz(5, -0x100, 13), stw(4, 8, 1), add(3, 5, 5), addi(13, 13, 0), pop, blr], False, G),
+    ]
+    stmw, lmw = 47 << 26 | 30 << 21 | 1 << 16 | 0x58, 46 << 26 | 30 << 21 | 1 << 16 | 0x58
+    big, unbig = 0x9421FFA0, 0x38210060
+    cases += [
+        # second form: other registers AND another order
+        ('reuse of one register where the original has two',
+         [li(7, 1), li(8, 2), stw(7, 0, 6), stw(8, 4, 6), li(3, 0), blr],
+         [li(7, 1), stw(7, 0, 6), li(7, 2), stw(7, 4, 6), li(3, 0), blr], True),
+        ('two registers where the original reuses one',
+         [li(7, 1), stw(7, 0, 6), li(7, 2), stw(7, 4, 6), li(3, 0), blr],
+         [li(7, 1), li(8, 2), stw(7, 0, 6), stw(8, 4, 6), li(3, 0), blr], True),
+        ('reuse of one register, values exchanged',
+         [li(7, 1), li(8, 2), stw(7, 0, 6), stw(8, 4, 6), li(3, 0), blr],
+         [li(7, 2), stw(7, 0, 6), li(7, 1), stw(7, 4, 6), li(3, 0), blr], False),
+        ('reuse of one register, read after the second write',
+         [li(7, 1), li(8, 2), stw(7, 0, 6), stw(8, 4, 6), li(3, 0), blr],
+         [li(7, 1), li(7, 2), stw(7, 0, 6), stw(7, 4, 6), li(3, 0), blr], False),
+        ('reuse of one register, aliasing stores in another order',
+         [li(7, 1), li(8, 2), stw(7, 0, 6), stw(8, 0, 9), li(3, 0), blr],
+         [li(7, 2), stw(7, 0, 9), li(7, 1), stw(7, 0, 6), li(3, 0), blr], False),
+        ('reuse of one register across a call',
+         [li(7, 1), li(8, 2), stw(7, 0, 31), bl(A + 12), stw(8, 4, 31), li(3, 0), blr],
+         [li(7, 1), stw(7, 0, 31), li(7, 2), bl(A + 12), stw(7, 4, 31), li(3, 0), blr], False),
+        ('reuse of one register, result register differs',
+         [li(7, 1), li(8, 2), stw(7, 0, 6), stw(8, 4, 6), mr(3, 8), blr],
+         [li(7, 1), stw(7, 0, 6), li(7, 2), stw(7, 4, 6), mr(3, 8), blr], False),
+        ('reuse of one register, loop carries the other value',
+         [li(7, 1), li(8, 2), stw(7, 0, 6), stw(8, 4, 6), cmpwi(3, 0), addi(3, 8, 0), bc(4, 2, -24), blr],
+         [li(7, 1), stw(7, 0, 6), li(7, 2), stw(7, 4, 6), cmpwi(3, 0), addi(3, 8, 0), bc(4, 2, -24), blr], False),
+        # lmw / stmw are a load / store, not a barrier
+        ('stack parameter loaded above stmw',
+         [big, stmw, lwz(5, 0x68, 1), mr(3, 5), lmw, unbig, blr],
+         [big, lwz(5, 0x68, 1), stmw, mr(3, 5), lmw, unbig, blr], True),
+        ('load from the stmw area above stmw',
+         [big, stmw, lwz(5, 0x5c, 1), mr(3, 5), lmw, unbig, blr],
+         [big, lwz(5, 0x5c, 1), stmw, mr(3, 5), lmw, unbig, blr], False),
+        ('write of a saved register above stmw',
+         [big, stmw, li(31, 0), mr(3, 31), lmw, unbig, blr],
+         [big, li(31, 0), stmw, mr(3, 31), lmw, unbig, blr], False),
+        ('read of a saved register below lmw',
+         [big, stmw, li(31, 0), mr(3, 31), lmw, unbig, blr],
+         [big, stmw, li(31, 0), lmw, mr(3, 31), unbig, blr], False),
+        ('load of a stack parameter below lmw',
+         [big, stmw, li(31, 0), lwz(3, 0x68, 1), lmw, unbig, blr],
+         [big, stmw, li(31, 0), lmw, lwz(3, 0x68, 1), unbig, blr], True),
     ]
     GP_ = ('global', 'pointer')
     for name, pre, a, b, want, relax in [
