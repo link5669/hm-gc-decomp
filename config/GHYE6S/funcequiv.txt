@@ -1,0 +1,6 @@
+# Functionally equivalent functions (EXPERIMENTAL, branch sched-equiv): functions whose code differs
+# from the original beyond registers and block-local order, but that tools/funcequiv.py PROVES to
+# compute the same thing (same calls with the same inputs, same stores, same results, same
+# callee-saved registers). One function name per line; `funcequiv.py --check` proves each of them
+# again from build/GHYE6S/src/<unit>.o. Nothing here is consulted by the link or by
+# tools/equivcheck.py yet (2026-11-12, wTV): the list is empty until the candidates are reviewed.
