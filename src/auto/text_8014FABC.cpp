@@ -8,7 +8,7 @@ extern f32 lbl_80364558;
 extern const f64 lbl_80364548;
 extern const f64 lbl_80364550;
 
-#define SQ(x) if (x > 0.0f) { \
+#define SQ(x) if (x > *(volatile f32 *)&lbl_80364544) { \
         f64 guess; \
         volatile f32 y; \
         guess = __frsqrte((f64)x); \
