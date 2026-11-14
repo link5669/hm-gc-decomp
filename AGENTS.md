@@ -23,6 +23,8 @@ Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), an
 
 - **wZB (2026-11-14):** `fn_801351AC` call-argument bug fixed (the vertex-buffer `unlock` takes the index count: `unlock(36)`; difftest PASS, size now 1808 = target). `fn_80155AE4`: remaining difftest FAIL is `r4` left over at the `((Tex *)sp)->v4()` bctrl (orig keeps `b` in r4 across fn_80155124; v4() takes no argument), i.e. benign; claim released.
 
+- **Claim (2026-11-14, user-approved):** Claude (wZG) is committing pragma-variant drafts for `text_8005E77C`, `text_800A1AA8` and linking/finishing `text_801351AC`, `text_80155AE4` (collaborator range); collaborator: shout if you're working on these.
+
 **Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
 that are still unmatched (function, unit, current match %; register-equivalent ones already excluded). Get each to an
 exact match (preferred) or an equivalent one, then set the unit `Matching`:
