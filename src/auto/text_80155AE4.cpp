@@ -17,7 +17,7 @@ void fn_80148310(Loc *);
 Lod *fn_80171438(Tex *, u8);
 void fn_800F6E40(Str *, void *);
 void fn_801488B4(Tex *, Str *);
-void fn_80134848(void);
+void fn_80134848(u32);
 Tex *fn_801348E8(void);
 void fn_801482DC(Loc *, u16 *);
 void fn_8015569C(S *, void *, u32 *, u32 *, Loc *, u8, u32 *);
@@ -43,7 +43,7 @@ void fn_80155AE4(S *a, void *b, Tex *tex, void *d) {
         a->f16 = a->f15 = ((Tex *)sp)->f1348;
     } else {
         Str s;
-        fn_80134848();
+        fn_80134848(a->f8);
         tex = fn_801348E8();
         fn_800F6E40(&s, d);
         s.f8 = 0;
