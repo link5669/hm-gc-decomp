@@ -29717,14 +29717,10 @@ auto/text_80227380.cpp:
 	.ctors      start:0x8029422C end:0x80294230
 
 auto/text_802273F0.cpp:
-	extab       start:0x80014E74 end:0x80014E7C
-	extabindex  start:0x80027D40 end:0x80027D4C
-	.text       start:0x802273F0 end:0x80227650
-
-auto/text_80227650.cpp:
-	extab       start:0x80014E7C end:0x80014E84
-	extabindex  start:0x80027D4C end:0x80027D58
-	.text       start:0x80227650 end:0x80227704
+	extab       start:0x80014E74 end:0x80014E84
+	extabindex  start:0x80027D40 end:0x80027D58
+	.text       start:0x802273F0 end:0x80227704
+	.sdata2     start:0x80365C58 end:0x80365C70
 
 auto/text_80227704.cpp:
 	extab       start:0x80014E84 end:0x80014E8C
