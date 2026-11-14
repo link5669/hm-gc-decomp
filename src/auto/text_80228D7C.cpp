@@ -47,7 +47,7 @@ void fn_80228D7C(S80228D7C *p) {
         fn_8023C528(&it, 0);
         while (it.a != NULL) {
             if (o != NULL) {
-                if ((*(VT_80228D7C **)o)->m5(o) != 0) {
+                if (o->m5() != 0) {
                     p->f54--;
                     fn_80225F58(*(void **)(lbl_8035B65C + 0x70), o);
                 }
