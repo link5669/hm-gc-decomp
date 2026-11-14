@@ -34,8 +34,8 @@ Method
             r3-r10 / f1-f8 / cr1 for an indirect callee) has the same value in the same
             register; r1, r2, r13 are the same; memory is the same (all of it, the stack
             frame included);
-    return  r3, every volatile register some caller may read after the return
-            (Program.retuse: r4 / f1 only when readable), every callee-saved register
+    return  every volatile register some caller may read after the return
+            (Program.retuse: r3 / r4 / f1 only when readable), every callee-saved register
             (r14-r31, f14-f31 with their second slots, cr2-cr4), r1, r2, r13, LR and
             memory are the same;
     tail    both of the above;
@@ -1401,7 +1401,7 @@ class Checker:
         if kind in ('ret', 'tail'):
             req += NONVOL_LOCS + KEEP_LOCS + ['lr']
         if kind == 'ret':
-            req += mask_locs(E.R3 | self.env.retuse(self.addr))
+            req += mask_locs(self.env.retuse(self.addr))   # r3 too only when a caller can read it (wZB)
         req += ['mem', 'fmem']
         # stores: one-to-one
         la, lb = so.stores, su.stores
@@ -1881,6 +1881,53 @@ SYNTH_NEG = ['swapargs', 'const', 'storealias', 'loadcall', 'dropstore', 'brcond
              'floatop', 'loadstore', 'target', 'retval', 'norestore']
 
 
+def ret3_synth():
+    """r3 at a return only has to match when some caller can read it (wZB). Hand-made programs
+    (as equivcheck.ret_synth for r4/f1): f leaves 1 in r3 in the original and 2 in ours."""
+    def li(d, i): return 14 << 26 | d << 21 | (i & 0xFFFF)
+    def mr(d, sr): return 31 << 26 | sr << 21 | d << 16 | sr << 11 | 444 << 1
+    def mtctr(sr): return 31 << 26 | sr << 21 | 9 << 16 | 467 << 1
+    def bl(at, to, lk=1): return 18 << 26 | ((to - at) & 0x3FFFFFC) | lk
+    blr, bctrl = 0x4E800020, 0x4E800421
+    F, H, G, K = 0x1100, 0x1200, 0x1300, 0x1400
+    tgt, ours = [li(3, 1), blr], [li(3, 2), blr]
+    cases = [
+        ('nobody reads r3', {H: [bl(H, F), li(5, 0), blr]}, [], True),
+        ('no caller at all', {}, [], True),
+        ('caller reads r3', {H: [bl(H, F), mr(5, 3), blr]}, [], False),
+        ('caller hands r3 on to its caller', {H: [bl(H, F), blr], K: [bl(K, H), mr(5, 3), blr]}, [], False),
+        ('later callee reads r3', {H: [bl(H, F), bl(H + 4, G), blr], G: [mr(5, 3), blr]}, [], False),
+        ('later callee does not read r3', {H: [bl(H, F), bl(H + 4, G), blr], G: [li(3, 0), blr]}, [], True),
+        ('tail call, the caller of the caller reads r3', {H: [bl(H, F, 0)], K: [bl(K, H), mr(5, 3), blr]}, [], False),
+        ('address of f in data, indirect caller reads r3', {K: [mtctr(5), bctrl, mr(6, 3), blr]}, [F], False),
+        ('indirect caller reads r3, address of f not taken', {K: [mtctr(5), bctrl, mr(6, 3), blr]}, [], True),
+        ('address of f built by lis/addi', {K: [mtctr(5), bctrl, mr(6, 3), blr],
+                                            G: [15 << 26 | 5 << 21, 14 << 26 | 5 << 21 | 5 << 16 | F, blr]}, [], False),
+        ('caller that is not analysed', {H: [0x44000002, bl(H + 4, F), blr]}, [], False),
+    ]
+    bad = 0
+    for name, others, data, want in cases:
+        mem = {}
+        syms = [('f', F, 4 * len(tgt))]
+        for k, w in enumerate(tgt):
+            mem[F + 4 * k] = w
+        for a, ws in others.items():
+            syms.append(('x%x' % a, a, 4 * len(ws)))
+            for k, w in enumerate(ws):
+                mem[a + 4 * k] = w
+        for k, w in enumerate(data):
+            mem[0x3000 + 4 * k] = w
+        prog = E.Program(E._Fake(mem, [(0, 0x1000, 0x1000, True), (0, 0x3000, 0x100, False)]), sorted(syms, key=lambda s: s[1]))
+        prog.strict = False
+        try:
+            ok, t = check_pair(ProgEnv(prog), F, tgt, ours)
+        except Reject as e:
+            ok, t = False, str(e)
+        print('  synthetic r3 at return, %s: %s%s' % (name, 'proved' if ok else 'rejected', '' if ok == want else ' (WRONG)'))
+        bad += ok != want
+    return bad
+
+
 def synth_run():
     bad = 0
     env = StubEnv()
@@ -1910,6 +1957,7 @@ def synth_run():
     print('  with cuts at joins: proved %s%s' % (' '.join(acc), '; ACCEPTED (must be rejected): ' + ' '.join(wrong)
                                               if wrong else '; every mutation rejected'))
     bad += len(wrong)
+    bad += ret3_synth()
     return bad
 
 
@@ -2606,7 +2654,9 @@ def fuzz_pair(prog, fn, ours, fakes, seeds=40, steps=20000, retuse=0, inputs_of=
                 return None, 'unicorn: %s at %08x' % (e, pc)
             if uc.reg_read(U.UC_PPC_REG_PC) != SENT:
                 return None, 'running'
-            regs = [uc.reg_read(U.UC_PPC_REG_0 + r) for r in [1, 2, 3, 13] + list(range(14, 32))]
+            regs = [uc.reg_read(U.UC_PPC_REG_0 + r) for r in [1, 2, 13] + list(range(14, 32))]
+            if retuse & E.R3:
+                regs.append(uc.reg_read(U.UC_PPC_REG_3))
             regs += [uc.reg_read(U.UC_PPC_REG_FPR0 + r) for r in range(14, 32)]
             if retuse & E.R4:
                 regs.append(uc.reg_read(U.UC_PPC_REG_4))
