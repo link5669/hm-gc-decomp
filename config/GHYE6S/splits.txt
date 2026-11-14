@@ -900,29 +900,10 @@ auto/text_8003B3B0.cpp:
 	.ctors      start:0x80293F28 end:0x80293F2C
 
 auto/text_8003B3E8.cpp:
-	extab       start:0x80005DEC end:0x80005DF4
-	extabindex  start:0x8001826C end:0x80018278
-	.text       start:0x8003B3E8 end:0x8003B5F8
-
-auto/text_8003B5F8.cpp:
-	extab       start:0x80005DF4 end:0x80005DFC
-	extabindex  start:0x80018278 end:0x80018284
-	.text       start:0x8003B5F8 end:0x8003B87C
-
-auto/text_8003B87C.cpp:
-	extab       start:0x80005DFC end:0x80005E04
-	extabindex  start:0x80018284 end:0x80018290
-	.text       start:0x8003B87C end:0x8003BA20
-
-auto/text_8003BA20.cpp:
-	extab       start:0x80005E04 end:0x80005E0C
-	extabindex  start:0x80018290 end:0x8001829C
-	.text       start:0x8003BA20 end:0x8003BC2C
-
-auto/text_8003BC2C.cpp:
-	extab       start:0x80005E0C end:0x80005E34
-	extabindex  start:0x8001829C end:0x800182A8
-	.text       start:0x8003BC2C end:0x8003C0D8
+	extab       start:0x80005DEC end:0x80005E34
+	extabindex  start:0x8001826C end:0x800182A8
+	.text       start:0x8003B3E8 end:0x8003C0D8
+	.sdata2     start:0x8035C148 end:0x8035C170
 
 auto/text_8003C0D8.c:
 	.text       start:0x8003C0D8 end:0x8003C0EC
