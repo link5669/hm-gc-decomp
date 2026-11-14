@@ -1,6 +1,5 @@
 #include "common.h"
-// fn_8011CD28: NonMatching draft (DIFF 2: the final self->head store is scheduled after it->prev = 0;
-// writing the two stores in target order swaps the self/it callee-saved registers instead).
+// fn_8011CD28: function-equivalent (funcequiv proves it): target store order, self/it saved regs swapped.
 
 extern "C" {
 typedef struct Item8011 {
@@ -57,8 +56,8 @@ void fn_8011CD28(Self8011 *__restrict self, u32 a, s32 b, s32 d, u32 c) {
     } else {
         if ((it->next = self->head) != 0) self->head->prev = it;
         else self->tail = it;
-        it->prev = 0;
         self->head = it;
+        it->prev = 0;
     }
 }
 
