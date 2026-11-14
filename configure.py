@@ -393,7 +393,7 @@ config.libs = [
             Object(Matching, "auto/text_8003519C.cpp", extra_cflags=["-Cpp_exceptions on"], mw_version="GC/2.0p1", extab_padding=[0xB0, 0x02]),
             Object(Matching, "auto/text_80036E0C.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_80035318.cpp", extra_cflags=["-Cpp_exceptions on"]),
-            Object(NonMatching, "auto/text_80035398.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on"]),
+            Object(Matching, "auto/text_80035398.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on"]),
             Object(Matching, "auto/text_80036E44.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_80036F10.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_80037060.cpp", extra_cflags=["-Cpp_exceptions on"]),
