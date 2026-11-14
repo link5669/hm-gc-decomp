@@ -13,6 +13,8 @@ Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), an
 
 - **Released (2026-11-14, wZB):** `fn_8009D0F4`, `fn_8009BAD0`, `fn_800502FC` are free again. Findings: fn_800502FC case 1 (`x *= s` of two equal values): MWCC CSEs `x*s` with `y*s` (target keeps two fmuls + `fmr f5,f1`); `f32 x = *(volatile f32 *)&lbl_8035DCA0;` makes the size match (4144->4152) but schedules the x multiply first, other f30/f31 and stfs-order diffs remain. fn_8009BAD0: frame +16 B, o/mc in r28/r29 instead of r30/r31 plus `mr r0,r3; mr r29,r0`; 240 decl-order/init-position permutations of f/mc/name1/tmp/i gave no gain. fn_8009D0F4: see wA_8009D0F4/STATUS.txt (prologue colour order; also needs .data 802CE5DC..EA40 + .rodata pool).
 
+- **Claim (2026-11-14, user-approved):** Claude (wZB) is hand-matching `fn_8008E4DC`, `fn_80035398`, `fn_8002CA0C`, `fn_80053430`, `fn_800326D0` (collaborator range < 0x800A0000); collaborator: shout if you're working on these.
+
 **Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
 that are still unmatched (function, unit, current match %; register-equivalent ones already excluded). Get each to an
 exact match (preferred) or an equivalent one, then set the unit `Matching`:
