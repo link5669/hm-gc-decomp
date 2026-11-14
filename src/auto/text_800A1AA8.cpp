@@ -49,6 +49,7 @@ static inline f32 Acos(f32 x) {
     if (x > lbl_80361BD0) return lbl_80361BD0;
     return lbl_80361C18;
 }
+static inline u32 pickIdx(u32 n) { u32 p = 0; if (n) p = (u32)rand() % n; return p; }
 #pragma push
 #pragma opt_common_subs off
 extern "C" void fn_800A1AA8(T *self) {
@@ -142,9 +143,9 @@ extern "C" void fn_800A1AA8(T *self) {
             if (!found) thr += *self->f288;
         }
         {
-            u32 pick = 0;
+            u32 pick;
             u32 k;
-            if (n) pick = (u32)rand() % n;
+            pick = pickIdx(n);
             for (i = 0, k = 0; i < self->f464; i++) {
                 if (self->f512[i]) {
                     if (k == pick) {
