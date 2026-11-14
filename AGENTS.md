@@ -229,6 +229,21 @@ call gets the same inputs, and that return values, callee-saved registers and al
   globals when no frame address escapes, fadd/fmul operands commutative, a volatile register a call leaves behind is
   garbage unless the function reads it). Strict mode (no policy) needs none of them. Not supported (rejected): bctr
   jump tables, paired-single arithmetic, mffs/mtfsf, hardware addresses, other frame layout.
+- Indirect-call rule (wZF, user-approved 2026-11-14 "Accept, with a strict check"): at a `bctrl`/`blrl` the prover used
+  to require r3-r10, f1-f8, cr1 to be equal (an unknown callee may read them). Now a volatile register may differ
+  there ONLY IF the target is a virtual call `lwz rV,0(rObj); lwz rF,SLOT(rV); mtctr/mtlr rF` (read off the symbolic
+  CTR/LR term: a word loaded at offset SLOT>=8, 4-aligned, from a word loaded at offset 0 of any object) and EVERY
+  function at offset SLOT in EVERY vtable can be enumerated and none of them may read the register
+  (`Program.inputs_of` per target; a target with an indirect call of its own, an asm/unanalysable one or a
+  stdarg one counts as reading all). Vtables = every `__vt__` symbol (an entry at SLOT that is neither 0 nor a function start
+  => rejected) plus every data address that is a data symbol, built by `lis+addi/ori` or r13/r2+offset in one
+  function, or held by a data word, whose second word is 0 (MWCC vtable: two header words, entries from +8; extent = up
+  to the next vtable start / first non-function word). Pointer from heap/args, vptr at another offset, computed slot,
+  fixed address, slot nobody has => the old rule (all argument registers required). Selftest: `vcall_synth` (16 cases).
+  Assumption: the word at offset 0 of the object is a vptr, and vtable addresses are formed as above. Finding: the
+  rule is hard to satisfy on this DOL: every slot (0xc..0x8c) of the real vtables has at least one genuine reader of
+  r3-r10 and f1-f8 (e.g. slot 0x8c: fn_80159D38 is stdarg and reads r9/r10/f1-f8), so none of the 13 bctrl candidates
+  of wZB (`hm-work/wZB/bctrl_case.txt`) is proved by it.
 - Assumption note (wTL): `fn_80034AFC`, `fn_80066714` (collab units, schedequiv) and `fn_80189BA4` pass equivcheck only
   under the "leftover volatile register" assumption: a stale f4/f7 reaches a callee that whole-program liveness says
   "may read" it, because the call chain ends in an indirect call (assumed to read f1-f8). The real callees read no

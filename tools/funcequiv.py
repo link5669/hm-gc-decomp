@@ -108,6 +108,7 @@ Usage:
 Needs z3 (and unicorn for --selftest / --fuzz): /home/mi/Decomp/hm-work/venv-tv/bin/python.
 """
 import argparse
+import bisect
 import ctypes
 import hashlib
 import json
@@ -1062,11 +1063,15 @@ class StubEnv:
     def retuse(self, a):
         return E.RETREGS
 
+    def indirect_inputs(self, term):
+        return None
+
 
 class ProgEnv:
     def __init__(self, prog):
         self.prog = prog
         self.sda = dict(prog.sda)
+        self.vt = None
         prog._solve_webs()
 
     def is_fn(self, t):
@@ -1080,6 +1085,205 @@ class ProgEnv:
 
     def retuse(self, a):
         return self.prog.retuse(a)
+
+    def indirect_inputs(self, term):
+        """Mask of the volatile registers some target of an indirect call may read, when the
+        target (the CTR / LR term) is a virtual-call load whose targets are all known, else None."""
+        if self.vt is None:
+            self.vt = VTables(self.prog)
+        return self.vt.inputs(term, self)
+
+
+# ---- indirect calls: every possible target (user-approved rule, 2026-11-14) -----------------
+
+def _leaves(t):
+    """(array, address of the first byte) when t is the big-endian word load Concat(Select(a, p),
+    Select(a, p+1), Select(a, p+2), Select(a, p+3)) (what Mem.load builds), else None."""
+    bs = []
+
+    def walk(x):
+        if x.decl().kind() == z3.Z3_OP_CONCAT:
+            for c in x.children():
+                walk(c)
+        else:
+            bs.append(x)
+    walk(t)
+    if len(bs) != 4 or any(b.decl().kind() != z3.Z3_OP_SELECT for b in bs):
+        return None
+    arr = bs[0].children()[0]
+    p0 = bs[0].children()[1]
+    for k, b in enumerate(bs):
+        c = b.children()
+        if not c[0].eq(arr) or not (c[1].eq(p0) if k == 0 else c[1].eq(S(p0 + k))):
+            return None
+    return arr, p0
+
+
+class VTables:
+    """Possible targets of a virtual call `lwz rV,0(rObj); lwz rF,SLOT(rV); mtctr rF; bctrl`.
+    Assumption (as for every virtual call): the word at offset 0 of the object is the address of a
+    vtable, and its entries from +8 on are the function pointers (MWCC layout: two header words
+    [0|rtti, 0] then one word per slot).  Vtables = every __vt__ symbol (symbols.txt; the entry
+    words at SLOT must then be 0 or a function start, else the target set is unbounded) and every
+    address in a data section that is a data symbol, that code builds (lis + addi / ori, in one function; r13 / r2 +
+    offset) or that a data word holds, and whose second word is 0 (the rest cannot be a vptr value
+    that way; their entries count when they are function starts).  A slot nobody has => unbounded."""
+
+    def __init__(self, prog):
+        self.prog = prog
+        self.dol = prog.dol
+        self.data = [(a, a + (size & ~3)) for _o, a, size, text in self.dol.secs if not text]
+        self.ws = {}
+        self.syms = {}
+        sf = getattr(prog, 'symfile', None)
+        if sf and os.path.exists(sf):
+            rx = re.compile(r'^(__vt__\S+) = \.data:0x([0-9A-Fa-f]+);.*size:0x([0-9A-Fa-f]+)')
+            for line in open(sf):
+                m = rx.match(line)
+                if m:
+                    self.syms[int(m.group(2), 16)] = int(m.group(3), 16)
+        self.cands = None
+        self.starts = None
+        self.cache = {}
+
+    def word(self, a):
+        for lo, hi in self.data:
+            if lo <= a < hi:
+                w = self.ws.get(lo)
+                if w is None:
+                    w = self.ws[lo] = self.dol.words(lo, hi - lo) or []
+                return w[(a - lo) >> 2] if (a - lo) >> 2 < len(w) else None
+        return None
+
+    def indata(self, a):
+        return a & 3 == 0 and any(lo <= a < hi for lo, hi in self.data)
+
+    def _scan(self):
+        prog = self.prog
+        cand = set()
+        for lo, hi in self.data:
+            for w in self.dol.words(lo, hi - lo) or ():
+                if self.indata(w):
+                    cand.add(w)
+        sda = getattr(prog, 'sda', {}) or {}
+        fns = sorted(prog.fns)
+        for _off, a, size, text in self.dol.secs:
+            if not text:
+                continue
+            end = a + (size & ~3)
+            cuts = [x for x in fns if a <= x < end] + [end]
+            cur = a
+            for s in cuts:
+                if s > cur:
+                    self._code(cur, s, cand, sda)
+                    cur = s
+        sf = getattr(prog, 'symfile', None)
+        if sf and os.path.exists(sf):                       # every data symbol may be a vtable too
+            rx = re.compile(r'^\S+ = \.(?:data|sdata|rodata):0x([0-9A-Fa-f]+);')
+            for line in open(sf):
+                m = rx.match(line)
+                if m and self.indata(int(m.group(1), 16)):
+                    cand.add(int(m.group(1), 16))
+        self.cands = {a for a in cand if self.word(a + 4) == 0}
+        self.cands -= set(self.syms)
+
+    def _code(self, a, e, cand, sda):
+        ws = self.dol.words(a, e - a) or ()
+        his, lows = set(), set()
+        for w in ws:
+            op = w >> 26
+            if op == 15 and (w >> 16 & 31) == 0:
+                his.add((w & 0xFFFF) << 16)
+            elif op == 14:
+                ra, lo = w >> 16 & 31, w & 0xFFFF
+                if ra in (2, 13) and ra in sda:
+                    t = (sda[ra] + (lo - 0x10000 if lo & 0x8000 else lo)) & M32
+                    if self.indata(t):
+                        cand.add(t)
+                elif ra:
+                    lows.add(lo - 0x10000 if lo & 0x8000 else lo)
+            elif op == 24:
+                lows.add(w & 0xFFFF)
+        for h in his:
+            for lo in lows:
+                t = (h + lo) & M32
+                if self.indata(t):
+                    cand.add(t)
+
+    def _extent(self, a):
+        """End of the vtable that starts at a: its entries (function starts or 0) up to the next
+        vtable start (a symbol or a candidate) or the first other word."""
+        if self.starts is None:
+            self.starts = sorted(set(self.cands) | set(self.syms))
+        k = bisect.bisect_right(self.starts, a)
+        lim = self.starts[k] if k < len(self.starts) else a + 0x1000
+        e = a + 8
+        while e < lim:
+            w = self.word(e)
+            if w is None or (w != 0 and w not in self.prog.fns):
+                break
+            e += 4
+        return e
+
+    def targets(self, slot):
+        """(frozenset of function starts, None) or (None, reason)."""
+        if slot in self.cache:
+            return self.cache[slot]
+        if self.cands is None:
+            self._scan()
+        fns = self.prog.fns
+        out = set()
+        res = None
+        for a, size in self.syms.items():
+            if slot < size:
+                w = self.word(a + slot)
+                if w in fns:
+                    out.add(w)
+                elif w != 0:
+                    res = (None, 'slot %#x of vtable %08x is no function (%s)' % (slot, a, '%08x' % w if w is not None else 'none'))
+                    break
+        if res is None:
+            for a in self.cands:
+                if slot < self._extent(a) - a:
+                    w = self.word(a + slot)
+                    if w in fns:
+                        out.add(w)
+            res = (frozenset(out), None) if out else (None, 'no vtable has a function at slot %#x' % slot)
+        self.cache[slot] = res
+        return res
+
+    def inputs(self, term, env):
+        """Volatile registers any target may read, or None when the call is not a bounded virtual call."""
+        why = None
+        lf = _leaves(term)
+        if lf is None:
+            why = 'target is not a loaded word'
+        else:
+            base, off = split(lf[1])
+            slot = off & M32
+            lf2 = _leaves(base) if base is not None else None
+            if base is None:
+                why = 'fixed address'
+            elif lf2 is None:
+                why = 'vtable pointer is not loaded from memory'
+            elif slot < 8 or slot & 3 or slot > 0x3000:
+                why = 'slot offset %#x' % slot
+            else:
+                obj, off2 = split(lf2[1])
+                if off2 != 0:
+                    why = 'vtable pointer is not at offset 0 of the object'
+                else:
+                    ts, why = self.targets(slot)
+                    if ts is not None:
+                        m = 0
+                        for t in ts:
+                            m |= env.inputs_of(t) & E.VOL
+                        if DEBUG:
+                            print('DEBUG virtual call slot %#x: %d targets, inputs %s' % (slot, len(ts), bin(m)))
+                        return m
+        if DEBUG:
+            print('DEBUG indirect call not bounded: %s' % why)
+        return None
 
 
 VOL_LOCS = mask_locs(E.VOL) + [('p', i) for i in range(14)]
@@ -1396,7 +1600,10 @@ class Checker:
                     raise Reject('call to %08x, not a function start (%s)' % (tgt, at))
                 req += mask_locs(self.env.inputs_of(tgt) & E.VOL)   # callee-saved registers are no inputs
             else:
-                req += mask_locs(E.ARGS_ALL) + [tgt]
+                # indirect: registers every possible target may read (all of ARGS_ALL unless the
+                # target is a virtual call whose vtables are all known)
+                regs = self.env.indirect_inputs(so.get(tgt)) if tgt in ('ctr', 'lr') else None
+                req += mask_locs(E.ARGS_ALL if regs is None else regs) + [tgt]
             req += KEEP_LOCS
         if kind in ('ret', 'tail'):
             req += NONVOL_LOCS + KEEP_LOCS + ['lr']
@@ -1928,6 +2135,97 @@ def ret3_synth():
     return bad
 
 
+def vcall_synth():
+    """Indirect calls: a volatile register that differs at a bctrl / blrl only matters when some
+    possible target may read it; the targets of a virtual call are the entries at the slot of every
+    vtable. Hand-made programs; returns the number of wrong answers."""
+    def fmr(d, b): return 63 << 26 | d << 21 | b << 11 | 72 << 1
+    def mtctr(r): return 31 << 26 | r << 21 | 9 << 16 | 467 << 1
+    def mtlr(r): return 31 << 26 | r << 21 | 8 << 16 | 467 << 1
+    def lwzx(d, a, b): return _X(23, d, a, b)
+    def lis(d, v): return _I(15, d, 0, v)
+    blr, bctrl, blrl = 0x4E800020, 0x4E800421, 0x4E800021
+    F, G1, G2, G3, G4, H = 0x1100, 0x1200, 0x1300, 0x1340, 0x1380, 0x1400
+    V1, V2, V3, V4 = 0x3000, 0x3020, 0x3040, 0x3060
+
+    def fn(slot=8, off=0, kind='ctr', f3=True, vptr_slot=None):
+        """lwz r12,off(r3); lwz r12,slot(r12); mtctr r12; bctrl; blr, preceded by fmr f3,f1 / f2"""
+        pre = [_I(37, 1, 1, -16), 0x7C0802A6, stw(0, 20, 1), fmr(3, 1 if f3 else 2)]
+        if vptr_slot == 'indexed':
+            body = [lwz(12, off, 3), lwzx(12, 12, 5)]
+        elif vptr_slot == 'direct':
+            body = [lwz(12, slot, 3)]
+        else:
+            body = [lwz(12, off, 3), lwz(12, slot, 12)]
+        return pre + body + ([mtctr(12), bctrl] if kind == 'ctr' else [mtlr(12), blrl]) + \
+            [lwz(0, 20, 1), 0x7C0803A6, addi(1, 1, 16), blr]
+
+    def run(tgt, ours, g2=(blr,), g3=None, g4=None, vt3=False, sym4=None, v4entry=None):
+        mem = {}
+        syms = []
+
+        def put(a, ws, name=None):
+            for k, w in enumerate(ws):
+                mem[a + 4 * k] = w
+            syms.append((name or 'x%x' % a, a, 4 * len(ws)))
+        put(F, tgt, 'f')
+        put(G1, [blr])
+        put(G2, list(g2))
+        put(G3, list(g3 or [blr]))
+        put(G4, list(g4 or [blr]))
+        put(H, [lis(4, 0), addi(4, 4, V1), lis(5, 0), addi(5, 5, V2), blr])       # V1, V2 have their address built
+        for a, e in ((V1, G1), (V2, G2), (V3, G3)):
+            for k, w in enumerate((0, 0, e)):
+                mem[a + 4 * k] = w
+        if vt3:
+            mem[0x3100] = V3                                                # V3: a data word holds its address
+        mem[V4 + 8] = G4 if v4entry is None else v4entry
+        prog = E.Program(E._Fake(mem, [(0, 0x1000, 0x1000, True), (0, 0x3000, 0x200, False)]),
+                         sorted(syms, key=lambda s: s[1]))
+        prog.strict = False
+        if sym4:
+            import tempfile
+            fh = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False)
+            fh.write('__vt__4Test = .data:0x%x; // type:object size:0xC\n' % V4)
+            fh.close()
+            prog.symfile = fh.name
+        try:
+            ok, t = check_pair(ProgEnv(prog), F, tgt, ours)
+        except Reject as e:
+            ok, t = False, str(e)
+        finally:
+            if sym4:
+                os.unlink(prog.symfile)
+        return ok, t
+
+    reads_f3 = [fmr(5, 3), blr]
+    ind = [mtctr(12), bctrl, blr]                                           # a callee with an indirect call
+    cases = [
+        ('all targets ignore f3', fn(), fn(f3=False), {}, True),
+        ('same with blrl', fn(kind='lr'), fn(kind='lr', f3=False), {}, True),
+        ('one vtable target reads f3', fn(), fn(f3=False), dict(g2=reads_f3), False),
+        ('one vtable target reads f3, blrl', fn(kind='lr'), fn(kind='lr', f3=False), dict(g2=reads_f3), False),
+        ('a target whose own indirect call may read f3', fn(), fn(f3=False), dict(g2=ind), False),
+        ('vtable only known by a data word reads f3', fn(), fn(f3=False), dict(g3=reads_f3, vt3=True), False),
+        ('vtable only known by a data word, ignoring f3', fn(), fn(f3=False), dict(vt3=True), True),
+        ('vtable of the symbol table reads f3', fn(), fn(f3=False), dict(g4=reads_f3, sym4=True), False),
+        ('vtable of the symbol table, ignoring f3', fn(), fn(f3=False), dict(sym4=True), True),
+        ('symbol table vtable with a non-function entry', fn(), fn(f3=False), dict(sym4=True, v4entry=0x3123), False),
+        ('unknown pointer source (no vptr load)', fn(vptr_slot='direct'), fn(vptr_slot='direct', f3=False), {}, False),
+        ('vptr at offset 4 of the object', fn(off=4), fn(off=4, f3=False), {}, False),
+        ('computed slot', fn(vptr_slot='indexed'), fn(vptr_slot='indexed', f3=False), {}, False),
+        ('slot inside the vtable header', fn(slot=4), fn(slot=4, f3=False), {}, False),
+        ('slot no vtable has', fn(slot=0x40), fn(slot=0x40, f3=False), {}, False),
+        ('same registers, a target reads f3', fn(), fn(), dict(g2=reads_f3), True),
+    ]
+    bad = 0
+    for name, tgt, ours, kw, want in cases:
+        ok, t = run(tgt, ours, **kw)
+        print('  synthetic indirect call, %s: %s%s' % (name, 'proved' if ok else 'rejected', '' if ok == want else ' (WRONG: %s)' % t))
+        bad += ok != want
+    return bad
+
+
 def synth_run():
     bad = 0
     env = StubEnv()
@@ -2342,6 +2640,7 @@ def selftest(args, P):
     print('synthetic pairs')
     bad += synth_run()
     bad += jt_run()
+    bad += vcall_synth()
     prog, env, secs, units = setup(P)
     print('real pairs (must be proved; single-instruction mutations of ours must be rejected)')
     mut = acc = 0
