@@ -5314,77 +5314,10 @@ auto/text_800A1074.cpp:
 	.text       start:0x800A1074 end:0x800A10D4
 
 auto/text_800A10D4.cpp:
-	extab       start:0x80008CB4 end:0x80008CBC
-	extabindex  start:0x8001AFD8 end:0x8001AFE4
-	.text       start:0x800A10D4 end:0x800A14F0
-
-auto/text_800A14F0.cpp:
-	extab       start:0x80008CBC end:0x80008CC4
-	extabindex  start:0x8001AFE4 end:0x8001AFF0
-	.text       start:0x800A14F0 end:0x800A15BC
-
-auto/text_800A15BC.cpp:
-	extab       start:0x80008CC4 end:0x80008CCC
-	extabindex  start:0x8001AFF0 end:0x8001AFFC
-	.text       start:0x800A15BC end:0x800A1608
-
-auto/text_800A1608.cpp:
-	extab       start:0x80008CCC end:0x80008CD4
-	extabindex  start:0x8001AFFC end:0x8001B008
-	.text       start:0x800A1608 end:0x800A1710
-
-auto/text_800A1710.cpp:
-	extab       start:0x80008CD4 end:0x80008CDC
-	extabindex  start:0x8001B008 end:0x8001B014
-	.text       start:0x800A1710 end:0x800A1860
-
-auto/text_800A1860.cpp:
-	extab       start:0x80008CDC end:0x80008CE4
-	extabindex  start:0x8001B014 end:0x8001B020
-	.text       start:0x800A1860 end:0x800A1A44
-
-auto/text_800A1A44.cpp:
-	extab       start:0x80008CE4 end:0x80008CEC
-	extabindex  start:0x8001B020 end:0x8001B02C
-	.text       start:0x800A1A44 end:0x800A1AA8
-
-auto/text_800A1AA8.cpp:
-	extab       start:0x80008CEC end:0x80008CF4
-	extabindex  start:0x8001B02C end:0x8001B038
-	.text       start:0x800A1AA8 end:0x800A210C
-
-auto/text_800A210C.cpp:
-	extab       start:0x80008CF4 end:0x80008CFC
-	extabindex  start:0x8001B038 end:0x8001B044
-	.text       start:0x800A210C end:0x800A217C
-
-auto/text_800A217C.c:
-	.text       start:0x800A217C end:0x800A2198
-
-auto/text_800A2198.cpp:
-	extab       start:0x80008CFC end:0x80008D04
-	extabindex  start:0x8001B044 end:0x8001B050
-	.text       start:0x800A2198 end:0x800A2204
-
-auto/text_800A2204.cpp:
-	extab       start:0x80008D04 end:0x80008D0C
-	extabindex  start:0x8001B050 end:0x8001B05C
-	.text       start:0x800A2204 end:0x800A226C
-
-auto/text_800A226C.cpp:
-	extab       start:0x80008D0C end:0x80008D14
-	extabindex  start:0x8001B05C end:0x8001B068
-	.text       start:0x800A226C end:0x800A27B0
-
-auto/text_800A27B0.cpp:
-	extab       start:0x80008D14 end:0x80008D1C
-	extabindex  start:0x8001B068 end:0x8001B074
-	.text       start:0x800A27B0 end:0x800A2870
-
-auto/text_800A2870.cpp:
-	extab       start:0x80008D1C end:0x80008D24
-	extabindex  start:0x8001B074 end:0x8001B080
-	.text       start:0x800A2870 end:0x800A29A4
+	extab       start:0x80008CB4 end:0x80008D24
+	extabindex  start:0x8001AFD8 end:0x8001B080
+	.text       start:0x800A10D4 end:0x800A29A4
+	.sdata2     start:0x80361BE8 end:0x80361BF0
 
 auto/text_800A29A4.cpp:
 	.text       start:0x800A29A4 end:0x800A2ABC

@@ -9,6 +9,7 @@ handoff; Claude and the collaborator both commit to `sched-equiv` (`git fetch &&
 Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), and run `ninja` +
 `python3 tools/equivcheck.py` before every push. Claude pushes this branch automatically about every 20 minutes.
 
+- **wZL (2026-11-14, collaborator range):** linked the merge `text_800A10D4` = 800A10D4..800A2870 (15 units, one TU, GC/1.3.2 + lmw, owns .sdata2 80361BE8..F0 = the int->float magic shared by fn_800A10D4/226C/2870; 226C and 2870 come out byte-exact, 800A10D4 and fn_800A1AA8 by funcequiv). fn_800A1AA8 needed `pick` as an inline's return value (`pick = pickIdx(n)`): the unnamed temp gets the lower volatile register like the target (r4), which removed the 'r4 differs at the ret' rejection. Same trick may fix other 'r4 differs at the ret' voids (fn_800A5BE8).
 - **Claim (2026-11-14, user-approved):** Claude (wZL) is working near-miss collaborator-range fns (smallest diffs first, starting with `text_8011CD28`); collaborator: shout if you're working on these.
 - **Claim (2026-11-14, user-approved):** Claude (wZB) is merging `text_80163BE4`, `text_80163CB4` with `text_801650F8` (shared int->float magic lbl_80364690); collaborator: shout if you're working on these.
 
