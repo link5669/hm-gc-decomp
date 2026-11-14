@@ -127,6 +127,8 @@ inline void Build(Obj *o) {
     }
 }
 
+#pragma push
+#pragma opt_lifetimes off
 void fn_8005E77C(Obj *o) {
     u8 *w;
     void *t;
@@ -224,5 +226,6 @@ void fn_8005E77C(Obj *o) {
     }
     Build(o);
 }
+#pragma pop
 
 } /* extern "C" */

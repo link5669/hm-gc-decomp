@@ -85,6 +85,8 @@ inline bool Near(const V3 &a, const V3 &b) {
     return a.x >= b.x - lbl_80366A74 && a.x <= b.x + lbl_80366A74 && a.y >= b.y - lbl_80366A74 && a.y <= b.y + lbl_80366A74 && a.z >= b.z - lbl_80366A74 && a.z <= b.z + lbl_80366A74;
 }
 
+#pragma push
+#pragma opt_loop_invariants off
 void fn_802611B8(Obj *o) {
     s32 *hit = sHit;
     s32 moved = 0;
@@ -183,5 +185,6 @@ void fn_802611B8(Obj *o) {
         o->p50.z -= m * o->ax.z;
     }
 }
+#pragma pop
 
 }

@@ -49,6 +49,8 @@ static inline f32 Acos(f32 x) {
     if (x > lbl_80361BD0) return lbl_80361BD0;
     return lbl_80361C18;
 }
+#pragma push
+#pragma opt_common_subs off
 extern "C" void fn_800A1AA8(T *self) {
     V3 pos;
     V3 dir;
@@ -161,4 +163,5 @@ extern "C" void fn_800A1AA8(T *self) {
         }
     }
 }
+#pragma pop
 }

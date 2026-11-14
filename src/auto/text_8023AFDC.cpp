@@ -58,6 +58,8 @@ static inline void fill(R *r, V3 *pos, V2 *uv, u32 start, u32 len) {
             }
 }
 #pragma opt_loop_invariants off
+#pragma push
+#pragma opt_common_subs off
 void fn_8023AFDC(R *r, void *unused, V3 *pos, s32 count, V2 *uv) {
     s32 tmp;
     s32 n;
@@ -87,4 +89,5 @@ void fn_8023AFDC(R *r, void *unused, V3 *pos, s32 count, V2 *uv) {
         off += n;
     }
 }
+#pragma pop
 }

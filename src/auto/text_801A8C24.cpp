@@ -141,6 +141,8 @@ inline s32 IsFoc(It *o) {
     return 0;
 }
 
+#pragma push
+#pragma opt_propagation off
 s32 fn_801A8C24(void *pv, u32 av, u32 bv) {
 P *p = (P *)pv;
 s32 a = av;
@@ -208,5 +210,6 @@ s32 r = 0;
     }
     return 0;
 }
+#pragma pop
 
 }
