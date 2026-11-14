@@ -9,6 +9,8 @@ handoff; Claude and the collaborator both commit to `sched-equiv` (`git fetch &&
 Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), and run `ninja` +
 `python3 tools/equivcheck.py` before every push. Claude pushes this branch automatically about every 20 minutes.
 
+- **Claim (2026-11-14, user-approved):** Claude (wZB) is merging `text_80163BE4`, `text_80163CB4` with `text_801650F8` (shared int->float magic lbl_80364690); collaborator: shout if you're working on these.
+
 **Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
 that are still unmatched (function, unit, current match %; register-equivalent ones already excluded). Get each to an
 exact match (preferred) or an equivalent one, then set the unit `Matching`:
