@@ -49,6 +49,8 @@ Your new to-do list is `tools/decomp_agent/collaborator_2026-11-14.txt` (32 unma
 - **Still blocked (function equivalent, unit not linkable):** the exact-code units 8002B760, 8002BDD4 (need 8002CA0C, 54 diff lines of regalloc + f1 at ret), 800A10D4/800A226C/800A2870/800A75B8 (shared magic lbl_80361BE8 / 80361F68, need fn_800A1AA8 and fn_800A6BFC; 800A1AA8 fails only on regalloc, "r4 differs at the ret"), 80033C38 (rodata strings 802947C8.. shared by 11 units incl. fn_80035398), 8007225C and 80051B50/80052028 (.rodata/.data base shared by 13 units), 8014E1E0 (ctor extab not understood), 80163BE4/80163CB4 (magic shared with Claude-range 801650F8; wZB). Lesson: a unit that owns its pool must also define every symbol its neighbours import, so shared pools force a merge of all users.
 - **Tools:** `tools/funcequiv.py` (z3 prover: `--list <unit> --policy`; jump tables and r3/r4/f1 return rule included), `tools/equivcheck.py --list <unit>`, difftest above (Unicorn run of original vs draft). Link recipe: unit `Matching`, fn into `config/GHYE6S/funcequiv.txt`/`schedequiv.txt`/`regequiv.txt`, commit with `/home/mi/Decomp/hm-work/safecommit.sh`.
 
+- **Claimed by Claude (wZC), user-approved, 2026-11-14:** linking collaborator-range units text_8013C63C text_8012DD1C text_800A5BE8 text_800A6BFC text_800A1AA8. Collaborator: shout if you're working on any of these.
+
 ## Status and ownership
 
 - Progress is in `build/GHYE6S/report.json`; `python3 tools/rea/finalize.py` prints the totals. The latest numbers are in `git log`. At handoff it was about 6,950 / 10,159 functions and about 27% of code.
