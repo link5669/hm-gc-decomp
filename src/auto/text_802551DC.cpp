@@ -37,6 +37,7 @@ extern char lbl_803665D8[6];
 extern char lbl_803665E0[7];
 extern volatile f32 lbl_803665A8;
 extern f32 lbl_803665B8;
+extern f32 lbl_803665F4;
 #define VS(a) (*(volatile f32 *)&(a))
 void fn_80129938(void *, void *);
 void fn_8012962C(void *, f32, f32, f32, f32);
@@ -71,7 +72,7 @@ void fn_802551DC(S *s, u8 *b, s32 a5, u32 a6, u32 a7) {
     s2->f644 = a7;
     s->f40 = s->f4->f16->v25();
     fn_80129938(s->f40, s->f32);
-    fn_8012962C(s->f40, 0.7853982f, 1.3333334f, 0.1f, 10000.0f);
+    fn_8012962C(s->f40, lbl_803665F4, 1.3333334f, 0.1f, 10000.0f);
     s->f44 = s->f4->f16->v25();
     fn_80129938(s->f44, s->f32);
     {
