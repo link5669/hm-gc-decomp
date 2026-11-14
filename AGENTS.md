@@ -21,6 +21,8 @@ Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), an
 
 - **wZB (2026-11-14):** `fn_80074AF4` (NonMatching draft): the two `x < (k = K)` clamps written as `k = K; x = x < k ? k : x;` make the function size match the target (7808 B, was 7804); other diffs (scheduling/regalloc) remain.
 
+- **Claim (2026-11-14, user-approved):** Claude (wZB) is fixing the call-argument bugs in `fn_801351AC` and `fn_80155AE4` (collaborator range); collaborator: shout if you're working on these.
+
 **Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
 that are still unmatched (function, unit, current match %; register-equivalent ones already excluded). Get each to an
 exact match (preferred) or an equivalent one, then set the unit `Matching`:
