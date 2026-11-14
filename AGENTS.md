@@ -19,6 +19,8 @@ Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), an
 
 - **Released (2026-11-14, wZB):** the `8002B760..8002CA0C` merge and `fn_80074AF4`. Merge state (script `/home/mi/Decomp/hm-work/wZB/apply20.sh`, `ROOT=<tree> apply20.sh`): 10 units, default version, `.sdata2` 8035B9A0-8035BA20 owned with the pool byte-identical to the DOL (named `__declspec(section ".sdata2")` globals in address order: u32 lbl_8035B9A0=0x800, the strings lbl_8035B9A4/AC(+2 pad)/B4/BC, floats C4,C8, then lbl_8035B9D8 as `extern const f32`, the literals DC..EC as macros with the real values 1.5/-0.5/0.33/0.66/4.0, then F0..BA1C named incl. u32 BA08=1; `0.0f` literals replaced by lbl_8035B99C). Layout, extab and sdata2 match; what is left is code: with the TU in the default version fn_8002BDD4 compiles 880 B (target 892; `opt_common_subs off` gives 884) and fn_8002CA0C/8002B760 are still drafts, so the cluster does not link. fn_80074AF4: writing the clamp `k = K; x = x < k ? k : x;` makes the size match (7808) but ~70 scattered scheduling/regalloc diffs remain (second clamp at 0x5d4 has the same pattern).
 
+- **wZB (2026-11-14):** `fn_80074AF4` (NonMatching draft): the two `x < (k = K)` clamps written as `k = K; x = x < k ? k : x;` make the function size match the target (7808 B, was 7804); other diffs (scheduling/regalloc) remain.
+
 **Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
 that are still unmatched (function, unit, current match %; register-equivalent ones already excluded). Get each to an
 exact match (preferred) or an equivalent one, then set the unit `Matching`:

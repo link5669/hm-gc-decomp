@@ -351,7 +351,8 @@ void fn_80074AF4(Ply *p, f32 dt) {
         if (p->x6ac > lbl_8035F3EC) {
             p->x6ac -= dt;
             f32 k;
-            if (p->x6ac < (k = lbl_8035F3EC)) p->x6ac = k;
+            k = lbl_8035F3EC;
+            p->x6ac = p->x6ac < k ? k : p->x6ac;
         }
         old = p->x4c8;
         p->x4c8 = fn_80037AA4(in, 0x6a);
@@ -765,7 +766,8 @@ void fn_80074AF4(Ply *p, f32 dt) {
                         fn_80190C98(n);
                     }
                     s = -((p->x44.z - hit.z) * lbl_8035F4A0 - lbl_8035F4E0);
-                    if (s < (k = lbl_8035F3EC)) s = k;
+                    k = lbl_8035F3EC;
+                s = s < k ? k : s;
                     e.x = s;
                     e.y = s;
                     e.z = s;
