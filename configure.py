@@ -5926,7 +5926,7 @@ config.libs = [
             Object(Matching, "auto/text_80209138.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_80209224.cpp", extra_cflags=["-Cpp_exceptions on", "-use_lmw_stmw on"]),
             Object(Matching, "auto/text_802092C0.cpp", extra_cflags=["-Cpp_exceptions on"]),
-            Object(NonMatching, "auto/text_80209368.cpp", extra_cflags=["-Cpp_exceptions on"]),
+            Object(Matching, "auto/text_80209368.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_802093CC.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_80209408.cpp", extra_cflags=["-Cpp_exceptions on"]),
             Object(Matching, "auto/text_80209460.c"),
@@ -7517,7 +7517,7 @@ config.libs = [
             Object(Matching, "bink/yuvconv.c", mw_version="ProDG/3.5", extra_cflags=["-O2", "-G0", "-fno-common"]),
             Object(Matching, "bink/fft.c", mw_version="ProDG/3.5", extra_cflags=["-O2", "-G0", "-fno-common"]),
             Object(NonMatching, "bink/binkdct.c", mw_version="ProDG/3.5", extra_cflags=["-O2", "-G0", "-fno-common"]),
-            Object(NonMatching, "bink/binkidct.c", mw_version="ProDG/3.5", extra_cflags=["-O2", "-G0", "-fno-common"]),
+            Object(Matching, "bink/binkidct.c", mw_version="ProDG/3.5", extra_cflags=["-O2", "-G0", "-fno-common"]),
         ],
     },
 ]

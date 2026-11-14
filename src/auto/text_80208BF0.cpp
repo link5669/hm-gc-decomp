@@ -9,19 +9,19 @@ extern "C" {
 extern "C" {
 extern u8 lbl_802EF968[];
 void __dl__FPv(int);
-void __dt__9C80208C80Fv(int, int);
+void __dt__9C8020EA30Fv(int, int);
 void fn_800BD474(int);
-struct VCall_dtor_80208BF0_0 { virtual void p0(); virtual void p1(); virtual void m(); };
+struct VCall___dt__9C80208C80Fv_0 { virtual void p0(); virtual void p1(); virtual void m(); };
 
-s32 * dtor_80208BF0(s32 *param_1, s16 param_2) {
+s32 * __dt__9C80208C80Fv(s32 *param_1, s16 param_2) {
     if (param_1 != (s32 *)0x0) {
         *param_1 = (s32)lbl_802EF968;
         if (param_1[0x10] != 0) {
-            ((VCall_dtor_80208BF0_0 *)(param_1))->m();
+            ((VCall___dt__9C80208C80Fv_0 *)(param_1))->m();
         }
         fn_800BD474((int)(param_1 + 1));
         param_1[0x10] = 0;
-        __dt__9C80208C80Fv((int)(param_1), (int)(0));
+        __dt__9C8020EA30Fv((int)(param_1), (int)(0));
         if (0 < param_2) {
             __dl__FPv((int)(param_1));
         }

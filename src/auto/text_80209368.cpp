@@ -2,7 +2,7 @@
 
 extern "C" {
 
-/* NonMatching draft (wMF, wMO): DIFF 14 / SDIFF 4. Base ctors made trivial and all three vt stores put in the first member-init arg (removes the this copies). Left: target materializes lbl_802EFC40 into r4 first (before the 934 pair) and uses r31 (not the r5 arg copy) for this+4. To link it also needs dtor_80208BF0 renamed to __dt__9C80208C80Fv and the current __dt__9C80208C80Fv (0x8020EA30, the FC40 base dtor) renamed (e.g. __dt__9C8020EA30Fv). */
+/* NonMatching draft (wMF, wMO): DIFF 14 / SDIFF 4. Base ctors made trivial and all three vt stores put in the first member-init arg (removes the this copies). Left: target materializes lbl_802EFC40 into r4 first (before the 934 pair) and uses r31 (not the r5 arg copy) for this+4. To link it also needs __dt__9C80208C80Fv renamed to __dt__9C8020EA30Fv and the current __dt__9C8020EA30Fv (0x8020EA30, the FC40 base dtor) renamed (e.g. __dt__9C8020EA30Fv). */
 extern u8 lbl_802EF934[], lbl_802EFC40[], lbl_802EF9A0[];
 struct C8020EA30_0 { void *vt; ~C8020EA30_0(); };
 struct C8020EA30 : C8020EA30_0 { ~C8020EA30(); };

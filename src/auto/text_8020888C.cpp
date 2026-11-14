@@ -9,7 +9,7 @@ extern "C" {
 extern "C" {
 extern u8 lbl_802EF920[];
 void __dl__FPv(int);
-void __dt__9C80208C80Fv(int, int);
+void __dt__9C8020EA30Fv(int, int);
 struct VCall_fn_8020888C_0 { virtual void p0(); virtual void p1(); virtual void m(); };
 
 u32 * fn_8020888C(u32 *param_1, s16 param_2) {
@@ -23,7 +23,7 @@ u32 * fn_8020888C(u32 *param_1, s16 param_2) {
         param_1[3] = 0;
         param_1[4] = 0;
         param_1[5] = 0;
-        __dt__9C80208C80Fv((int)(param_1), (int)(0));
+        __dt__9C8020EA30Fv((int)(param_1), (int)(0));
         if (0 < param_2) {
             __dl__FPv((int)(param_1));
         }
