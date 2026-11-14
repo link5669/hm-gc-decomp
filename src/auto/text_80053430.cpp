@@ -150,8 +150,8 @@ void fn_80053430(P *p, f32 dt)
                 a.x = mx * e.x + a.x;
                 a.y = mx * e.y + a.y;
                 a.z = mx * e.z + a.z;
-                p->f118->s14(&a, 0, 0, 0, 0);
             }
+            p->f118->s14(&a, 0, 0, 0, 0);
         } else if (p->f168 && len > *p->f168) {
             fn_802494A4(p, 10);
             if (p->f158) *p->f158 &= ~0x800;
