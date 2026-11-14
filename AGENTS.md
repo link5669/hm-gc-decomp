@@ -39,6 +39,8 @@ text_800A75B8 (int->float constant shared with unmatched fn_800A6BFC).
 
 - **Claimed by Claude (wZC), user-approved, 2026-11-14:** linking collaborator-range units text_800FFA4C text_8014FABC text_800AAC34. Collaborator: shout if you're working on any of these.
 
+- **Claimed by Claude (wZC), user-approved, 2026-11-14:** linking collaborator-range units text_8003B3E8 text_8003B5F8 text_8003B87C text_8003BA20 text_8003BC2C text_8002CA0C. Collaborator: shout if you're working on any of these.
+
 ## Status and ownership
 
 - Progress is in `build/GHYE6S/report.json`; `python3 tools/rea/finalize.py` prints the totals. The latest numbers are in `git log`. At handoff it was about 6,950 / 10,159 functions and about 27% of code.
