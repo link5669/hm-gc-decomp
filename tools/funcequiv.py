@@ -109,6 +109,8 @@ Needs z3 (and unicorn for --selftest / --fuzz): /home/mi/Decomp/hm-work/venv-tv/
 """
 import argparse
 import ctypes
+import hashlib
+import json
 import os
 import random
 import re
@@ -134,6 +136,12 @@ RET = -1
 DEBUG = False
 ALIAS = False           # the alias rules (--frame) are on for the pair being checked
 FPCOMM = False          # --fp-commute: fadd/fmul operands may be exchanged (as equivcheck rule d)
+
+
+class JList(list):
+    """Words of a function plus `jt`: {address of a jump table: word index of the target of
+    each of its entries}, from the relocations of our object."""
+    jt = None
 
 
 class Reject(Exception):
@@ -367,7 +375,7 @@ def mask_locs(m):
 
 
 class St:
-    __slots__ = ('g', 'f', 'p', 'cr', 'ctr', 'lr', 'ca', 'so', 'env', 'mem', 'fmem', 'stores')
+    __slots__ = ('g', 'f', 'p', 'cr', 'ctr', 'lr', 'ca', 'so', 'env', 'mem', 'fmem', 'stores', 'jtab', 'jt')
 
     def copy(self):
         s = St()
@@ -376,6 +384,7 @@ class St:
         s.mem = self.mem.copy()
         s.fmem = self.fmem.copy()
         s.stores = list(self.stores)
+        s.jtab, s.jt = self.jtab, self.jt
         return s
 
     def get(self, loc):
@@ -625,8 +634,13 @@ def step(st, w, addr, lo, hi, fr=0, own=0):
                 bad()
             return ('br', c, RET, i + 1)
         if xo == 528:                                     # bcctr
-            if D & 20 != 20 or B or not w & 1:
+            if D & 20 != 20 or B:
                 bad('bctr without link (jump table / indirect tail call)')
+            if not w & 1:
+                ent = st.jt.get(st.ctr.get_id())
+                if ent is None:
+                    bad('bctr that is no jump table (indirect tail call)')
+                return ('sw', ent[1], ent[0])
             return ('call', 'ctr')
         if w & 1:
             bad()
@@ -658,6 +672,15 @@ def step(st, w, addr, lo, hi, fr=0, own=0):
             if upd and (A == 0 or A == D):
                 bad()
             ea = ea_x()
+            if xo == 23 and A and st.jtab is not None:
+                # jump table: a word load at constant table base + index offset
+                for base, off in ((g[A], g[B]), (g[B], g[A])):
+                    if z3.is_bv_value(base) and st.jtab(base.as_long()):
+                        t0 = base.as_long()
+                        v = UF('jt%08x' % t0, 32, off)
+                        st.jt[v.get_id()] = (t0, off)
+                        g[D] = v
+                        return None
             v = st.mem.load(ea, size)
             g[D] = v if size == 4 else S(z3.SignExt(32 - 8 * size, v) if sx else z3.ZeroExt(32 - 8 * size, v))
             if upd:
@@ -843,17 +866,68 @@ def step(st, w, addr, lo, hi, fr=0, own=0):
 
 
 class Side:
-    def __init__(self, words, addr):
+    def __init__(self, words, addr, dol=None):
         self.words = words
         self.addr = addr
         self.n = len(words)
         self.end = addr + 4 * self.n
+        self.jt = getattr(words, 'jt', None)                # {table address: [word index of each case]}
+        self.dol = dol
+        self._tabs = {}
+        self.swt = self._switch_targets()
         self.headers = self._headers()
         self.joins = self._joins()
         self.fr = [0] * self.n                              # own frame as a memory of its own
         self.own = [0] * self.n                             # own frame known apart from globals
         self.frame = self._frame()
         self.noescape = not E.SchedCtx._escapes(words)
+
+    def tab(self, a):
+        """The cases of a jump table at constant address `a`: word index of the target of
+        every entry, an entry being a word of the table that points into this function
+        (ours: the relocations of the table; original: the DOL words). The table is assumed
+        constant (jump tables are never written). None when there is no table."""
+        if a in self._tabs:
+            return self._tabs[a]
+        out = None
+        if self.jt is not None:
+            out = self.jt.get(a)
+        elif self.dol is not None:
+            out = []
+            off = self.dol.find(a)
+            while a & 3 == 0 and off is not None and len(out) < 1024 and self.dol.find(a + 4 * len(out)) == off + 4 * len(out):
+                v = struct.unpack('>I', self.dol.data[off + 4 * len(out):off + 4 * len(out) + 4])[0]
+                if not (self.addr <= v < self.end and v & 3 == 0):
+                    break
+                out.append((v - self.addr) >> 2)
+        out = list(out) if out else None
+        self._tabs[a] = out
+        return out
+
+    def _switch_targets(self):
+        """Word indexes every bctr of this version may reach (all tables whose address is
+        built by lis + addi / ori somewhere in the function; only for the CFG analyses)."""
+        k = {}
+        out = set()
+        cand = set()
+        for w in self.words:
+            op = w >> 26
+            D, A = (w >> 21) & 31, (w >> 16) & 31
+            if op == 15 and A == 0:
+                k[D] = (w & 0xFFFF) << 16
+            elif op == 14 and A in k:
+                k[D] = (k[A] + sext16(w & 0xFFFF)) & M32
+                cand.add(k[D])
+            elif op == 24 and D in k:
+                k[A] = k[D] | (w & 0xFFFF)
+                cand.add(k[A])
+        self.cand = sorted(cand)
+        for a in cand:
+            out.update(self.tab(a) or ())
+        return sorted(out)
+
+    def alltabs(self):
+        return {a: self.tab(a) for a in self.cand}
 
     def _frame(self):
         """(per-instruction flag: r1 is the function's own frame pointer, frame size) as
@@ -913,6 +987,8 @@ class Side:
                 return []
             ti = (t - self.addr) >> 2
             return [ti] if (w >> 21) & 20 == 20 else [ti, i + 1]
+        if op == 19 and (w >> 1) & 1023 == 528 and not w & 1 and (w >> 21) & 20 == 20:
+            return list(self.swt)
         if op == 19 and (w >> 1) & 1023 in (16, 528):
             return [i + 1] if w & 1 or (w >> 21) & 20 != 20 else []
         return [i + 1]
@@ -1025,7 +1101,7 @@ def normalize(raw):
 
 class Checker:
     def __init__(self, env, addr, owords, uwords, steps=200000, paths=4000, timeout=5000, frame=False,
-                 ro=None, leftover=False, joins=False, limit=None):
+                 ro=None, leftover=False, joins=False, limit=None, udol=None):
         self.env = env
         self.joins = joins                                  # every join of the CFG is a cut point as well
         self.deadline = time.time() + limit if limit else None
@@ -1042,8 +1118,9 @@ class Checker:
                 ru = env.retuse(addr)
                 self.left = (fo.xlive(ru, env.thru_of) + [0], fu.xlive(ru, env.thru_of) + [0])
         self.addr = addr
-        self.o = Side(owords, addr)
-        self.u = Side(uwords, addr)
+        prog = getattr(env, 'prog', None)
+        self.o = Side(owords, addr, prog.dol if prog is not None else None)
+        self.u = Side(uwords, addr, udol)
         self.alias = bool(frame)
         self.frame = False
         if frame and self.o.frame and self.u.frame:         # rules 'global' / 'pointer' of equivcheck rule f
@@ -1149,6 +1226,8 @@ class Checker:
             st = St()
             st.g, st.f, st.p, st.cr = [None] * 32, [None] * 32, [None] * 32, [None] * 8
             st.stores = []
+            st.jtab = (self.o if side == 'o' else self.u).tab
+            st.jt = {}
             for loc in LOCS:
                 lab = part[(side, loc)]
                 if isinstance(lab, tuple):
@@ -1227,6 +1306,32 @@ class Checker:
             for c in (a, b):
                 if c.stop is None:
                     c.stop = self.advance(c)
+            for c in (a, b):
+                if c.stop[0] != 'sw':
+                    continue
+                _k, off, t0 = c.stop
+                cases = c.sd.tab(t0)
+                if not cases:
+                    raise Reject('internal: jump table lost')
+                offid = off.get_id()
+                if not self.prove(pc, z3.And([off != 4 * k for k in range(len(cases))])):
+                    raise Reject('jump table index not provably inside the table (%s)' % self.where(a, b))
+                known = {e[2] for e in pcset if isinstance(e, tuple) and e[1] == offid}
+                for k, tgt in enumerate(cases):
+                    if known and k not in known:
+                        continue
+                    cnd = S(off == 4 * k)
+                    if z3.is_false(cnd) or not self.feasible(pc + [cnd]):
+                        continue
+                    c2 = c.fork()
+                    c2.i, c2.stop = tgt, None
+                    oth = (b if c is a else a).fork()
+                    npc, nset = pc + [cnd], pcset | {cnd.get_id(), ('eq', offid, k)}
+                    if c is a:
+                        self.tandem(c2, oth, npc, nset)
+                    else:
+                        self.tandem(oth, c2, npc, nset)
+                return
             for c in (a, b):
                 if c.stop[0] != 'br':
                     continue
@@ -1459,7 +1564,8 @@ def our_words(prog, secs, unit, obj, name):
         raise Reject('missing')
     shndx, val, size = obj.funcs[name]
     base = obj.sh[shndx][4] + val
-    words = list(struct.unpack('>%dI' % (size // 4), obj.d[base:base + size]))
+    words = JList(struct.unpack('>%dI' % (size // 4), obj.d[base:base + size]))
+    words.jt = {}
     fakes = {}                                              # section index -> (pseudo address, bytes)
     for off, lst in sorted(obj.rel.get(shndx, {}).items()):
         if not val <= off < val + size:
@@ -1498,6 +1604,13 @@ def our_words(prog, secs, unit, obj, name):
                     tied = theirs is not None and mine == theirs
                 if tied:
                     target = rng[0][0] + sval
+                    if shdr[1] == 1 and sec != '.text':     # jump table entries: relocations against this function
+                        for ro, l2 in sorted(obj.rel.get(sshndx, {}).items()):
+                            for ty2, sx2, ad2 in l2:
+                                n2, _b2, sh2, sv2 = obj.syms[sx2]
+                                if ty2 == 1 and sh2 == shndx and lo <= ro < hi and val <= sv2 + ad2 < val + size \
+                                        and (sv2 + ad2 - val) & 3 == 0:
+                                    words.jt.setdefault(rng[0][0] + ro, (sv2 + ad2 - val) >> 2)
                 elif sec in ('.sdata2', '.rodata') and shdr[1] == 1 and not obj.rel.get(sshndx):
                     # A read-only literal without a place in the original: it gets a pseudo
                     # address; only its bytes are known (loads fold to them), as an address
@@ -1540,6 +1653,12 @@ def our_words(prog, secs, unit, obj, name):
             else:
                 raise Reject('unsupported relocation type %d' % ty)
             words[i] = w
+    ent, words.jt = words.jt, {}
+    for a0 in ent:
+        run = []
+        while a0 + 4 * len(run) in ent:
+            run.append(ent[a0 + 4 * len(run)])
+        words.jt[a0] = run
     return words, sorted(fakes.values())
 
 
@@ -1558,7 +1677,7 @@ def check_fn(prog, env, secs, unit, obj, name, limit=120, **kw):
         ours, fakes = our_words(prog, secs, unit, obj, name)
     except Reject as e:
         return False, str(e), 0
-    if ours == fn.words:
+    if ours == fn.words and Side(fn.words, fn.addr, prog.dol).alltabs() == Side(ours, fn.addr).alltabs():
         return True, 'exact', 0
     kw['ro'] = RoData(prog, fakes)
     signal.signal(signal.SIGALRM, _alarm)
@@ -1794,6 +1913,55 @@ def synth_run():
     return bad
 
 
+JT_ADDR = 0x80410000
+
+
+def synth_jt(v=''):
+    """A switch with a jump table (4 cases, table at JT_ADDR); v: 'order' other block order
+    (positive) | 'wrongentry' two table entries exchanged | 'wrongbody' a case computes
+    something else | 'bound' the bound check admits an index past the table | 'tailcall' an
+    indirect tail call (bctr of a loaded pointer) | 'noload' (negative)."""
+    a = Asm()
+    v = v.split('+')
+    a.w(_I(10, 0, 3, 4 if 'bound' in v else 3))               # cmplwi r3,3
+    a.bc(12, 1, 'dflt')                                       # bgt
+    if 'tailcall' in v:
+        a.w(lwz(0, 0, 4), 0x7C0903A6, 0x4E800420)
+    else:
+        a.w(_I(15, 5, 0, JT_ADDR >> 16), 21 << 26 | 3 << 21 | 2 << 11 | 29 << 1, _X(23, 0, 5, 0),
+            0x7C0903A6, 0x4E800420)
+    order = ['c0', 'c1', 'c2', 'c3'] if 'order' not in v else ['c2', 'c0', 'c3', 'c1']
+    val = {'c0': 10, 'c1': 20, 'c2': 31 if 'wrongbody' in v else 30, 'c3': 40}
+    for c in order:
+        a.label(c)
+        a.w(li(3, val[c]))
+        a.b('end')
+    a.label('dflt')
+    a.w(li(3, 0))
+    a.label('end')
+    a.w(BLR)
+    out = JList(a.words())
+    ent = [a.labels[c] for c in ('c0', 'c1', 'c2', 'c3')]
+    if 'wrongentry' in v:
+        ent[1], ent[2] = ent[2], ent[1]
+    out.jt = {JT_ADDR: ent}
+    return out
+
+
+def jt_run():
+    bad = 0
+    env = StubEnv()
+    base = synth_jt()
+    for v, want in (('', True), ('order', True), ('wrongentry', False), ('wrongbody', False), ('bound', False),
+                    ('tailcall', False), ('order+wrongentry', False), ('order+wrongbody', False)):
+        for x, y in ((base, synth_jt(v)), (synth_jt(v), base)):
+            ok, t = check_pair(env, 0x80400000, x, y)
+            print('  jump table %-17s %s: %s' % (v or 'identical', ('proved' if ok else 'rejected') +
+                                               ('' if ok == want else ' (WRONG)'), t[:90]))
+            bad += ok != want
+    return bad
+
+
 _INIT = {}
 
 
@@ -1816,6 +1984,7 @@ def concrete_state(rnd, mem_base):
     st.mem = Mem(arr)
     st.fmem = Mem(arr)
     st.stores = []
+    st.jtab, st.jt = None, {}
     return st, init
 
 
@@ -2124,6 +2293,7 @@ def selftest(args, P):
     bad += fidelity()
     print('synthetic pairs')
     bad += synth_run()
+    bad += jt_run()
     prog, env, secs, units = setup(P)
     print('real pairs (must be proved; single-instruction mutations of ours must be rejected)')
     mut = acc = 0
@@ -2173,8 +2343,94 @@ def selftest(args, P):
         print('  %-22s %d runs compared, %d by their calls only, %d not comparable%s' % (
             name, done, part, skipped, ': DIFFERENT (%s)' % diff if diff else ''))
         bad += bool(diff) or not done + part
+    bad += cache_selftest(prog, P)
     print('selftest: %s' % ('OK' if not bad else 'FAILED (%d)' % bad))
     return 1 if bad else 0
+
+
+_SHA_CACHE = {}
+
+
+def _sha_file(path):
+    h = _SHA_CACHE.get(path)
+    if h is None:
+        h = _SHA_CACHE[path] = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+    return h
+
+
+def proof_key(P, fn, ours, udol, flags):
+    """sha256 over everything a proof depends on: this tool's source (prover version), the flags, the
+    original DOL and symbols.txt (original words, relocations resolved to addresses, read-only data,
+    callee facts all derive from them), our linked words of the function and the words of the jump
+    tables it uses in our DOL."""
+    h = hashlib.sha256()
+    for part in (_sha_file(os.path.abspath(__file__)), _sha_file(os.path.abspath(E.__file__)), repr(sorted(flags.items())), _sha_file(P['orig']),
+                 _sha_file(P['syms']), '%08x' % fn.addr, repr(list(ours)),
+                 repr(sorted((a, t) for a, t in Side(ours, fn.addr, udol).alltabs().items()))):
+        h.update(part.encode() if isinstance(part, str) else part)
+        h.update(b'\0')
+    return h.hexdigest()
+
+
+def cache_selftest(prog, P):
+    """The proof cache key changes with every byte it depends on; only stored keys hit."""
+    import tempfile
+    print('proof cache')
+    fn = prog.byname['fn_801ED66C']
+    dol = prog.dol
+    ours = list(fn.words)
+    fl = {'frame': True, 'leftover': True, 'fpcomm': True}
+    k0 = proof_key(P, fn, ours, dol, fl)
+    bad = 0
+    muts = []
+    w2 = list(ours)
+    w2[3] ^= 0x10000
+    muts.append(('one word of ours', proof_key(P, fn, w2, dol, fl)))
+    muts.append(('policy flag', proof_key(P, fn, ours, dol, dict(fl, frame=False))))
+    # a different jump table word in our DOL
+    class D2:
+        pass
+    d2 = E.Dol(P['orig'])
+    t0 = sorted(Side(ours, fn.addr, dol).alltabs())[0]
+    off = d2.find(t0)
+    b = bytearray(d2.data)
+    b[off:off + 4] = struct.pack('>I', fn.addr + 8)
+    d2.data = bytes(b)
+    muts.append(('jump table word', proof_key(P, fn, ours, d2, fl)))
+    same = proof_key(P, fn, list(ours), dol, fl) == k0
+    print('  identical input, same key: %s' % ('yes' if same else 'NO (must)'))
+    bad += not same
+    for what, k in muts:
+        ok = k != k0
+        print('  changed %-18s key differs: %s' % (what, 'yes' if ok else 'NO (must)'))
+        bad += not ok
+    tmp = os.path.join(tempfile.mkdtemp(), 'c.json')
+    cache_store(tmp, k0, 'x')
+    c = cache_load(tmp)
+    hit = k0 in c and muts[0][1] not in c
+    print('  cache stores the key and misses the changed one: %s' % ('yes' if hit else 'NO (must)'))
+    bad += not hit
+    return bad
+
+
+def cache_load(path):
+    try:
+        d = json.load(open(path))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def cache_store(path, key, name):
+    d = cache_load(path)
+    d[key] = name
+    tmp = '%s.%d.tmp' % (path, os.getpid())
+    try:
+        with open(tmp, 'w') as f:
+            json.dump(d, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass
 
 
 def dolcheck(args, P):
@@ -2192,11 +2448,21 @@ def dolcheck(args, P):
             rc = 1
             continue
         ours = list(dol.words(fn.addr, 4 * fn.n))
-        if ours == list(fn.words):
+        if ours == list(fn.words) and Side(fn.words, fn.addr, prog.dol).alltabs() == Side(ours, fn.addr, dol).alltabs():
             print('PASS %s: exact' % name)
             continue
+        cpath = os.path.join(P['build'], 'funcequiv_cache.json')
+        key = None
+        if not getattr(args, 'no_cache', False):
+            key = proof_key(P, fn, ours, dol, {'frame': bool(args.frame), 'leftover': bool(args.leftover),
+                                               'fpcomm': bool(FPCOMM)})
+            if key in cache_load(cpath):
+                print('PASS %s: proved earlier (cache %s)' % (name, key[:12]))
+                continue
         ok, text_ = check_pair(env, fn.addr, fn.words, ours, limit=args.limit, frame=args.frame,
-                               leftover=args.leftover, ro=RoData(prog))
+                               leftover=args.leftover, ro=RoData(prog), udol=dol)
+        if ok and key:
+            cache_store(cpath, key, name)
         print('%s %s: %s' % ('PASS' if ok else 'FAIL', name, text_))
         sys.stdout.flush()
         rc |= not ok
@@ -2260,6 +2526,7 @@ def fuzz_pair(prog, fn, ours, fakes, seeds=40, steps=20000, retuse=0, inputs_of=
 
     class Machine:
         def __init__(self, words):
+            jt = getattr(words, 'jt', None)
             words = [(w & 0x03FF0000) | (54 if w >> 26 == 60 else 50) << 26 |
                      ((w & 0xFFF) - (0x1000 if w & 0x800 else 0)) & 0xFFFF
                      if w >> 26 in (56, 60) and not w & 0xF000 else w for w in words]
@@ -2268,6 +2535,12 @@ def fuzz_pair(prog, fn, ours, fakes, seeds=40, steps=20000, retuse=0, inputs_of=
             uc.mem_map(lo, hi - lo)
             self.base = bytes(img[:fn.addr - lo]) + struct.pack('>%dI' % len(words), *words) + \
                 bytes(img[self.end - lo:])
+            if jt:                                          # jump tables of our object: our case targets
+                bs = bytearray(self.base)
+                for a0, run in jt.items():
+                    for k, idx in enumerate(run):
+                        bs[a0 - lo + 4 * k:a0 - lo + 4 * k + 4] = struct.pack('>I', fn.addr + 4 * idx)
+                self.base = bytes(bs)
             uc.mem_write(lo, self.base)
             uc.mem_map(0x1000, 0x7000)                     # pseudo addresses of our read-only literals
             uc.mem_write(0x1000, bytes(low))
@@ -2412,6 +2685,7 @@ def main():
                          'function reads it with its own instructions (assumption of equivcheck rule d)')
     ap.add_argument('--policy', action='store_true', help='--frame --fp-commute --leftover')
     ap.add_argument('--debug', action='store_true')
+    ap.add_argument('--no-cache', action='store_true', help='dolcheck: prove again even when the proof cache has it')
     args = ap.parse_args()
     if args.policy:
         args.frame = args.fp_commute = args.leftover = True

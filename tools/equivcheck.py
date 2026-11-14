@@ -1625,6 +1625,46 @@ def funcequiv_hook(P, names):
     return res
 
 
+def jump_table_words(orig, P):
+    """{file offset: (function, start, end)} of the words of jump tables of the functions listed in
+    funcequiv.txt: a table address is built by lis + addi / ori in the function and the words from
+    there on point into the function. A linked version of such a function may have other targets
+    (tools/funcequiv.py proves that they lead to the same behaviour); no other code reads them."""
+    if 'fallow' not in P:
+        return {}
+    names = set(load_allow(P['fallow']))
+    out = {}
+    for name, a, size in load_syms(P['syms']):
+        if name not in names:
+            continue
+        ws = orig.words(a, size) or ()
+        k = {}
+        cand = set()
+        for w in ws:
+            op, d, r = w >> 26, (w >> 21) & 31, (w >> 16) & 31
+            if op == 15 and r == 0:
+                k[d] = (w & 0xFFFF) << 16
+            elif op == 14 and r in k:
+                v = w & 0xFFFF
+                k[d] = (k[r] + (v - 0x10000 if v & 0x8000 else v)) & 0xFFFFFFFF
+                cand.add(k[d])
+            elif op == 24 and d in k:
+                k[r] = k[d] | (w & 0xFFFF)
+                cand.add(k[r])
+        for c in cand:
+            n = 0
+            while True:
+                off = orig.find(c + 4 * n)
+                if off is None or c & 3:
+                    break
+                v = struct.unpack('>I', orig.data[off:off + 4])[0]
+                if not (a <= v < a + size and v & 3 == 0):
+                    break
+                out[off] = (name, a, a + size)
+                n += 1
+    return out
+
+
 def check_dol(args, P):
     orig = Dol(P['orig'])
     if not os.path.exists(P['dol']):
@@ -1637,6 +1677,8 @@ def check_dol(args, P):
     text = max((s for s in orig.secs if s[3]), key=lambda s: s[2])
     toff, taddr, tsize, _ = text
     bad = 0
+    jtd = {}        # function -> jump table words that differ (funcequiv.txt functions only)
+    jtok = None
     exd = {}        # extab entry address -> True, for entries with differing bytes
     if orig.data[:toff] != ours.data[:toff] or orig.data[toff + tsize:] != ours.data[toff + tsize:]:
         ex = Extab(orig, ours, P)
@@ -1646,6 +1688,15 @@ def check_dol(args, P):
                 if exoff is not None and exoff <= i < exoff + ex.a1 - ex.a0 and ex.entry_of(ex.a0 + i - exoff):
                     exd[ex.entry_of(ex.a0 + i - exoff)] = True
                     continue
+                if jtok is None:
+                    jtok = jump_table_words(orig, P)
+                jt = jtok.get(i)
+                if jt is not None:
+                    vo = struct.unpack('>I', orig.data[i:i + 4])[0]
+                    vu = struct.unpack('>I', ours.data[i:i + 4])[0]
+                    if jt[1] <= vu < jt[2] and vu & 3 == 0:
+                        jtd[jt[0]] = jtd.get(jt[0], 0) + 1
+                        continue
                 print('FAIL: byte difference outside .text at file offset 0x%x' % i)
                 bad += 1
                 if bad >= 10:
@@ -1667,7 +1718,7 @@ def check_dol(args, P):
     n = tsize // 4
     wo = struct.unpack('>%dI' % n, orig.data[toff:toff + tsize])
     wu = struct.unpack('>%dI' % n, ours.data[toff:toff + tsize])
-    touched = {}
+    touched = dict(jtd)
     for i in range(n):
         if wo[i] != wu[i]:
             a = taddr + 4 * i
