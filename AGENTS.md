@@ -25,6 +25,8 @@ Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), an
 
 - **Claim (2026-11-14, user-approved):** Claude (wZG) is committing pragma-variant drafts for `text_8005E77C`, `text_800A1AA8` and linking/finishing `text_801351AC`, `text_80155AE4` (collaborator range); collaborator: shout if you're working on these.
 
+- **wZG (2026-11-14):** released `text_80155AE4`/`fn_80155AE4`: the sp-path code up to the v4() bctrl is identical to the original modulo register numbers; remaining diffs are regalloc/scheduling only (w/h loads vs stores), no C fix found; `text_801351AC` linked (939b42c0).
+
 **Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
 that are still unmatched (function, unit, current match %; register-equivalent ones already excluded). Get each to an
 exact match (preferred) or an equivalent one, then set the unit `Matching`:
