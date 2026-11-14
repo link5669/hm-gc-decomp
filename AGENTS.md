@@ -29,6 +29,8 @@ text_800A75B8 (int->float constant shared with unmatched fn_800A6BFC).
 
 **Claude's range** (`>= 0x80165000`, Bink/MSL/SDK; ~118 unmatched) stays with Claude; don't edit those units.
 
+- **Claimed by Claude (wZC), user-approved, 2026-11-14:** linking collaborator-range units text_8002B760 text_8002BDD4 text_80033C38 text_8003B3E8 text_8003B87C text_80051B50 text_80052028 text_8007225C text_80088294 text_800A226C. Collaborator: shout if you're working on any of these.
+
 ## Status and ownership
 
 - Progress is in `build/GHYE6S/report.json`; `python3 tools/rea/finalize.py` prints the totals. The latest numbers are in `git log`. At handoff it was about 6,950 / 10,159 functions and about 27% of code.
