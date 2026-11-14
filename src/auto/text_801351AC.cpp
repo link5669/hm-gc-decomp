@@ -5,7 +5,7 @@ extern "C" {
 struct Desc { u8 d[28]; };
 struct VL { f32 *p; u32 stride; u8 pad8[40]; f32 *uv; u8 pad52[28]; u32 uvstride; u8 pad84[32]; };
 struct IL { u16 *p; };
-struct Buf { virtual void s0(); virtual void s1(); virtual void s2(); virtual void s3(); virtual void s4(); virtual void lockV(Desc *, int, VL *); virtual void setN(int); virtual void s7(); virtual void s8(); virtual void lockI(int, IL *); virtual void unlock(); virtual int draw(void *, void *, int, u8 *); };
+struct Buf { virtual void s0(); virtual void s1(); virtual void s2(); virtual void s3(); virtual void s4(); virtual void lockV(Desc *, int, VL *); virtual void setN(int); virtual void s7(); virtual void s8(); virtual void lockI(int, IL *); virtual void unlock(int); virtual int draw(void *, void *, int, u8 *); };
 struct Mk { u8 pad_[48]; virtual void s0(); virtual void s1(); virtual void s2(); virtual void s3(); virtual void s4(); virtual void s5(); virtual void s6(); virtual void s7(); virtual void s8(); virtual void s9(); virtual void s10(); virtual void s11(); virtual void s12(); virtual void s13(); virtual void s14(); virtual void s15(); virtual void s16(); virtual void s17(); virtual void s18(); virtual Buf *make(); };
 extern f32 lbl_80364100;
 extern f32 lbl_80364104;
@@ -60,7 +60,7 @@ int fn_801351AC(Mk **__restrict o, f32 *__restrict box, void *__restrict q, u8 f
     tri(&il, 0, 1, 2); tri(&il, 1, 3, 2); tri(&il, 3, 1, 7); tri(&il, 1, 5, 7);
     tri(&il, 1, 0, 5); tri(&il, 0, 4, 5); tri(&il, 0, 2, 4); tri(&il, 2, 6, 4);
     tri(&il, 2, 3, 6); tri(&il, 3, 7, 6); tri(&il, 6, 7, 4); tri(&il, 7, 5, 4);
-    b->unlock();
+    b->unlock(36);
     b->setN(8);
     return b->draw(o, q, 1, &f);
 }
