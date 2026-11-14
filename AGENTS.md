@@ -11,6 +11,8 @@ Pull right before you commit (`git pull --rebase=merges origin sched-equiv`), an
 
 - **Claim (2026-11-14, user-approved):** Claude (wZB) is merging `text_80163BE4`, `text_80163CB4` with `text_801650F8` (shared int->float magic lbl_80364690); collaborator: shout if you're working on these.
 
+- **Claim (2026-11-14, user-approved):** Claude (wZB) is hand-matching `fn_8009D0F4`, `fn_8009BAD0`, `fn_800502FC` (collaborator range, addresses < 0x800A0000); collaborator: shout if you're working on these.
+
 **Your to-do list:** `tools/decomp_agent/collaborator_2026-11-12.txt`: the 87 game functions below `0x80165000`
 that are still unmatched (function, unit, current match %; register-equivalent ones already excluded). Get each to an
 exact match (preferred) or an equivalent one, then set the unit `Matching`:
