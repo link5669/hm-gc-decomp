@@ -33,7 +33,7 @@ void fn_8024A610(S *s, V *c, V *d, f32 r, f32 g) {
     Prs pr = lbl_802A9238;
     V v;
     s32 n;
-    u32 i;
+    u32 i, j = 0;
     n = (s32)(lbl_80366340 * (lbl_80366344 * (lbl_80366348 * r)));
     for (i = 0; i < 3; i++) {
         s->p[i].x = lbl_80366350 * rndr(n) + c->x - r;
@@ -56,10 +56,10 @@ void fn_8024A610(S *s, V *c, V *d, f32 r, f32 g) {
             s->v[i].y = v.y + jit();
             s->v[i].z = v.z + jit();
         }
-        s->hit[i] = 0;
+        s->hit[i] = j;
     }
-    for (i = 0; i < 3; i++) {
-        s->rest[i] = fn_80101590(&s->p[pr.p[i].a], &s->p[pr.p[i].b]);
+    for (; j < 3; j++) {
+        s->rest[j] = fn_80101590(&s->p[pr.p[j].a], &s->p[pr.p[j].b]);
     }
     s->ground = g;
     s->active = 1;
