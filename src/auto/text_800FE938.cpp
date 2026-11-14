@@ -18,7 +18,7 @@ u32 fn_800FE938(Box *box, V3 *a, V3 *b, V3 *o0, V3 *o1, f32 *t0, f32 *t1) {
             if (o1->x < box->e.x + box->c.x) {
                 *t0 = (box->e.x + box->c.x - ax) / (bx - ax);
                 fn_80101624(o0, a, b, *t0);
-                code = (code & ~0x3F) | (lbl_80363764);
+                code = lbl_80363764;
             } else return 0;
         }
         if (o0->x >= -box->e.x + box->c.x) {
@@ -33,7 +33,7 @@ u32 fn_800FE938(Box *box, V3 *a, V3 *b, V3 *o0, V3 *o1, f32 *t0, f32 *t1) {
             if (o0->x < box->e.x + box->c.x) {
                 *t1 = (box->e.x + box->c.x - ax) / (bx - ax);
                 fn_80101624(o1, a, b, *t1);
-                code = (code & ~0x3F) | (lbl_8036376C);
+                code = lbl_8036376C;
             } else return 0;
         }
         if (o1->x >= -box->e.x + box->c.x) {
@@ -49,14 +49,14 @@ u32 fn_800FE938(Box *box, V3 *a, V3 *b, V3 *o0, V3 *o1, f32 *t0, f32 *t1) {
             if (o1->y < box->e.y + box->c.y) {
                 *t0 = (box->e.y + box->c.y - a->y) / (b->y - a->y);
                 fn_80101624(o0, a, b, *t0);
-                code = (code & ~0x3F) | (lbl_80363774);
+                code &= ~0x3F; code |= lbl_80363774;
             } else return 0;
         }
         if (o0->y >= -box->e.y + box->c.y) {
             if (o1->y < -box->e.y + box->c.y) {
                 *t1 = (-box->e.y + box->c.y - a->y) / (b->y - a->y);
                 fn_80101624(o1, a, b, *t1);
-                code = (code & ~0xFC0) | (lbl_80363778);
+                code &= ~0xFC0; code |= lbl_80363778;
             }
         } else return 0;
     } else {
@@ -64,14 +64,14 @@ u32 fn_800FE938(Box *box, V3 *a, V3 *b, V3 *o0, V3 *o1, f32 *t0, f32 *t1) {
             if (o0->y < box->e.y + box->c.y) {
                 *t1 = (box->e.y + box->c.y - a->y) / (b->y - a->y);
                 fn_80101624(o1, a, b, *t1);
-                code = (code & ~0xFC0) | (lbl_8036377C);
+                code &= ~0xFC0; code |= lbl_8036377C;
             } else return 0;
         }
         if (o1->y >= -box->e.y + box->c.y) {
             if (o0->y < -box->e.y + box->c.y) {
                 *t0 = (-box->e.y + box->c.y - a->y) / (b->y - a->y);
                 fn_80101624(o0, a, b, *t0);
-                code = (code & ~0x3F) | (lbl_80363780);
+                code &= ~0x3F; code |= lbl_80363780;
             }
         } else return 0;
     }
@@ -80,14 +80,14 @@ u32 fn_800FE938(Box *box, V3 *a, V3 *b, V3 *o0, V3 *o1, f32 *t0, f32 *t1) {
             if (o1->z < box->e.z + box->c.z) {
                 *t0 = (box->e.z + box->c.z - a->z) / (b->z - a->z);
                 fn_80101624(o0, a, b, *t0);
-                code = (code & ~0x3F) | (lbl_80363784);
+                code &= ~0x3F; code |= lbl_80363784;
             } else return 0;
         }
         if (o0->z >= -box->e.z + box->c.z) {
             if (o1->z < -box->e.z + box->c.z) {
                 *t1 = (-box->e.z + box->c.z - a->z) / (b->z - a->z);
                 fn_80101624(o1, a, b, *t1);
-                code = (code & ~0xFC0) | (lbl_80363788);
+                code &= ~0xFC0; code |= lbl_80363788;
             }
         } else return 0;
     } else {
@@ -95,14 +95,14 @@ u32 fn_800FE938(Box *box, V3 *a, V3 *b, V3 *o0, V3 *o1, f32 *t0, f32 *t1) {
             if (o0->z < box->e.z + box->c.z) {
                 *t1 = (box->e.z + box->c.z - a->z) / (b->z - a->z);
                 fn_80101624(o1, a, b, *t1);
-                code = (code & ~0xFC0) | (lbl_8036378C);
+                code &= ~0xFC0; code |= lbl_8036378C;
             } else return 0;
         }
         if (o1->z >= -box->e.z + box->c.z) {
             if (o0->z < -box->e.z + box->c.z) {
                 *t0 = (-box->e.z + box->c.z - a->z) / (b->z - a->z);
                 fn_80101624(o0, a, b, *t0);
-                code = (code & ~0x3F) | (lbl_80363790);
+                code &= ~0x3F; code |= lbl_80363790;
             }
         } else return 0;
     }

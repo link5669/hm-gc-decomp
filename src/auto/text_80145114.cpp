@@ -59,9 +59,10 @@ extern "C" {
 void fn_80146610(C80145114 *);
 
 void fn_80145114(C80145114 *t, u8 *dst, s32 dpitch, s32 dx, s32 dy, u8 *src, s32 spitch, Rc *__restrict r) {
-    s32 step;
     u8 *e;
-    u8 *sv, *nx;
+    s32 step;
+    u8 *sv;
+    u8 *nx;
     s32 y0, y1, x1, x0;
     if ((y1 = r->y1) <= (y0 = r->y0) || (x1 = r->x1) <= (x0 = r->x0)) return;
     if (!(t->f28 & 1)) return;
