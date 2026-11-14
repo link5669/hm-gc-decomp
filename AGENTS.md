@@ -65,6 +65,8 @@ Your new to-do list is `tools/decomp_agent/collaborator_2026-11-14.txt` (32 unma
 
 - **Claimed by Claude (wZC), user-approved, 2026-11-14:** linking collaborator-range units text_8013C63C text_8012DD1C text_800A5BE8 text_800A6BFC text_800A1AA8. Collaborator: shout if you're working on any of these.
 
+- **Claimed by Claude (wZH), user-approved, 2026-11-14:** hand-matching collaborator-range fns fn_800A1AA8 fn_800A5BE8 fn_800A6BFC fn_800AA770 fn_800FE938 (units text_ of the same addresses). Collaborator: shout if you're working on any of these.
+
 ## Status and ownership
 
 - Progress is in `build/GHYE6S/report.json`; `python3 tools/rea/finalize.py` prints the totals. The latest numbers are in `git log`. At handoff it was about 6,950 / 10,159 functions and about 27% of code.
