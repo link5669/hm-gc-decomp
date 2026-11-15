@@ -3,6 +3,7 @@ object_base: orig/GHYE6S
 object: sys/main.dol
 hash: d0f5f43d43c16bc361b65b0c8002bee7116d0f07
 symbols: config/GHYE6S/symbols.txt
+ldscript_template: config/GHYE6S/ldscript_mp.tpl
 splits: config/GHYE6S/splits.txt
 mw_comment_version: 10
 detect_objects: true
