@@ -141,29 +141,67 @@ int mp_split_render(void *game, void *gx, const f32 *eye2, const f32 *at2)
 
 void *mp_split_cam2(void) { return s_cam2; }
 
-/* Split-screen policy: split when the players are far apart (with hysteresis), camera 2 follows
-   player 2 with the same offset and direction camera 1 has from player 1. */
-#define SPLIT_ON_DIST 9.0f
-#define SPLIT_OFF_DIST 6.0f
-extern f32 mp_view[2][16];
+/* Split-screen policy: split as soon as either player is not visible in player 1's (full-screen) view;
+   merge again once both have been comfortably on screen for half a second. Camera 2 follows player 2 with the
+   same offset and direction camera 1 has from player 1. */
+extern f32 mp_view[2][16], mp_proj[2][16];
 extern u8 mp_have_mtx[2];
-static int s_split_on;
+static int s_split_on, s_visible_frames;
+
+/* NDC of world point w in camera 1's view as a full-screen (4:3) projection; returns 0 if behind. */
+static int ndc_full(const f32 *w, f32 *nx, f32 *ny)
+{
+    const f32 *v = mp_view[0], *p = mp_proj[0];
+    f32 e[3], cx, cy, cw;
+    int i;
+    for (i = 0; i < 3; i++)
+        e[i] = v[i * 4] * w[0] + v[i * 4 + 1] * w[1] + v[i * 4 + 2] * w[2] + v[i * 4 + 3];
+    cx = p[0] * e[0] + p[1] * e[1] + p[2] * e[2] + p[3];
+    cy = p[4] * e[0] + p[5] * e[1] + p[6] * e[2] + p[7];
+    cw = p[12] * e[0] + p[13] * e[1] + p[14] * e[2] + p[15];
+    if (cw < 0.1f)
+        return 0;
+    *nx = cx / cw;
+    *ny = cy / cw;
+    if (s_split_on)
+        *nx *= 0.5f;  /* captured while split: the pane projection is half as wide */
+    return 1;
+}
+
+/* Is the player's whole body (feet and head) inside the screen, with the given NDC margin? */
+static int on_screen(const f32 *pos, f32 lim)
+{
+    f32 w[3], x, y;
+    int k;
+    for (k = 0; k < 2; k++) {
+        w[0] = pos[0]; w[1] = pos[1]; w[2] = pos[2] + (k ? 1.8f : 0.1f);
+        if (!ndc_full(w, &x, &y) || x < -lim || x > lim || y < -lim || y > lim)
+            return 0;
+    }
+    return 1;
+}
 
 int mp_coop_render(void *game, void *gx)
 {
-    f32 p1[3], p2[3], eye[3], fwd[3], eye2[3], at2[3], d2;
+    f32 p1[3], p2[3], eye[3], fwd[3], eye2[3], at2[3];
     const f32 *v = mp_view[0];
     int i;
 
     if (!mp_player_pos(mp_player[0], p1) || !mp_player_pos(mp_player[1], p2) || !mp_have_mtx[0])
         return 0;
-    d2 = (p1[0] - p2[0]) * (p1[0] - p2[0]) + (p1[1] - p2[1]) * (p1[1] - p2[1]) + (p1[2] - p2[2]) * (p1[2] - p2[2]);
-    if (mp.debug_split)
+    if (mp.debug_split) {
         s_split_on = 1;
-    else if (d2 > SPLIT_ON_DIST * SPLIT_ON_DIST)
-        s_split_on = 1;
-    else if (d2 < SPLIT_OFF_DIST * SPLIT_OFF_DIST)
-        s_split_on = 0;
+    } else if (!s_split_on) {
+        if (!on_screen(p1, 0.95f) || !on_screen(p2, 0.95f))
+            s_split_on = 1, s_visible_frames = 0;
+    } else {
+        if (on_screen(p1, 0.75f) && on_screen(p2, 0.75f)) {
+            if (++s_visible_frames > 30)
+                s_split_on = 0;
+        } else {
+            s_visible_frames = 0;
+        }
+    }
     if (!s_split_on)
         return 0;
     /* camera 1 pose from its view matrix (rows = camera axes, looks down -row2) */

@@ -8,6 +8,7 @@ s32 fn_800629DC(void *a, s32 b, s32 c);
 void fn_800326D0(void *game, void *gx);
 void mp_debug_mtx(void);
 int mp_coop_render(void *game, void *gx);
+void mp_draw_p2_hud(void);
 
 /* Hook: first call in main(), before the game sets up its heaps. */
 s32 mp_hook_main_init(void *a, s32 b, s32 c)
@@ -39,6 +40,7 @@ void mp_game_render(void *game, void *gx)
             mp_draw_tags(*(void **)((u8 *)game + 0x28), 0.0f, 0.0f, 640.0f, 480.0f);
         }
     }
+    mp_draw_p2_hud();
     mp_ui_draw();
 }
 

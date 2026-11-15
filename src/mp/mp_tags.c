@@ -71,3 +71,28 @@ extern f32 mp_view[2][16], mp_proj[2][16];
 extern u8 mp_have_mtx[2];
 
 void mp_debug_mtx(void) {}
+
+/* Player 2's own health bar and lives, bottom right (player 1 keeps the game's HUD). */
+extern s32 mp_p2_lives;
+void mp_draw_p2_hud(void)
+{
+    void *p2 = mp_player[1];
+    f32 hp, max, frac, x = 452.0f, y = 400.0f;
+    char buf[16];
+    int n;
+    if (!p2 || mp.mode != MP_COOP)
+        return;
+    hp = *(f32 *)((u8 *)p2 + 0x1ac);
+    max = *(f32 *)((u8 *)p2 + 0x1a8);
+    frac = max > 0.0f ? hp / max : 0.0f;
+    if (frac < 0.0f) frac = 0.0f;
+    if (frac > 1.0f) frac = 1.0f;
+    mp_draw_text(x, y - 18.0f, mp.name[1], 1.0f, tag_col[1]);
+    mp_draw_box(x - 2.0f, y - 2.0f, 124.0f, 14.0f, 0x000000C0);
+    mp_draw_box(x, y, 120.0f * frac, 10.0f, frac > 0.3f ? 0x3070E0FF : 0xE04040FF);
+    n = mp_p2_lives;
+    buf[0] = 'x'; buf[1] = (char)('0' + (n > 9 ? 9 : n < 0 ? 0 : n)); buf[2] = 0;
+    mp_draw_text(x + 128.0f, y - 2.0f, buf, 1.0f, 0xFFFFFFFF);
+    if (n <= 0 && hp <= 0.0f)
+        mp_draw_text_centered(x + 60.0f, y + 16.0f, "OUT OF LIVES", 1.0f, 0xE04040FF);
+}
