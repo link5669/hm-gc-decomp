@@ -32,6 +32,11 @@ void gpu_efb_poke(int x, int y, int is_z, uint32_t value);
 // Internal resolution multiplier for the EFB (1 = 640x528 native). Set before gpu_init.
 void gpu_set_scale(int scale);
 
+// Target display aspect (4/3 = original). Other values widen the EFB (physical width = 640*scale*a/(4/3)),
+// widen the perspective FOV, keep 2D shapes (except near-full-width ortho draws, which stretch), and
+// gpu_present fills a window of that aspect. Takes effect at the next EFB->XFB copy. May be called every frame.
+void gpu_set_aspect(float a);
+
 // Debug/test helper: last XFB image as RGBA8 (top row first, host resolution). Pointer valid until the
 // next call. Returns 0 if no XFB copy happened yet.
 int gpu_debug_read_xfb(uint8_t **rgba, int *w, int *h);

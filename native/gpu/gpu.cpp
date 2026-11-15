@@ -1,5 +1,7 @@
 // C ABI entry points (gpu.h).
 #include <SDL.h>
+#include <cstdio>
+#include <cstdlib>
 #include "glfuncs.h"
 #include "gx_internal.h"
 
@@ -27,6 +29,8 @@ extern "C" {
 
 void gpu_set_scale(int scale) { s_req_scale = scale < 1 ? 1 : scale; }
 
+void gpu_set_aspect(float a) { gx::set_aspect(a); }
+
 void gpu_init(uint8_t *ram, uint32_t ram_size) {
   gx::g_ram = ram;
   gx::g_ram_size = ram_size;
@@ -39,6 +43,12 @@ void gpu_init(uint8_t *ram, uint32_t ram_size) {
   gx::bp[0x21] = (527u) | (639u << 12);
   gx::fifo_reset();
   gx::texcache_init();
+  if (const char *e = getenv("HM_ASPECT")) {  // temporary until the runtime calls gpu_set_aspect
+    float a = 0, b = 0;
+    if (sscanf(e, "%f:%f", &a, &b) == 2 && b > 0) a /= b;
+    else a = (float)atof(e);
+    if (a > 0) gx::set_aspect(a);
+  }
   gx::render_init(s_req_scale);
   s_inited = true;
 }

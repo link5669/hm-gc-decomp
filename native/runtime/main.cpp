@@ -25,7 +25,7 @@ static bool g_fullscreen;
 void hw_poll_host() {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
-        if (e.type == SDL_QUIT) { LOG("quit\n"); fflush(stderr); _exit(0); }
+        if (e.type == SDL_QUIT) { LOG("quit\n"); audio_shutdown(); fflush(stderr); _exit(0); }
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             SDL_Keycode k = e.key.keysym.sym;
             if (k == SDLK_F11 || (k == SDLK_RETURN && (e.key.keysym.mod & KMOD_ALT))) {
@@ -42,6 +42,7 @@ void hw_poll_host() {
 // The GPU calls this after each EFB->XFB copy. Presentation happens at VI retrace (present_vi_frame),
 // showing whatever frame buffer the VI scans out: a GPU copy, or a CPU-written XFB (Bink movies).
 static u32 g_copy_addr[2]; static u64 g_copy_serial;
+extern "C" __attribute__((weak)) void gpu_set_aspect(float) {}
 extern "C" void gpu_cb_xfb_copy(uint32_t xfb, uint32_t w, uint32_t h) {
     g_copy_addr[g_copy_serial++ & 1] = xfb & 0x01FFFFFF;
 }
@@ -65,6 +66,16 @@ void present_vi_frame(u32 xfb, int w, int h) {
     }
     if (gpu_frame && g_copy_serial == last_serial && xfb == last_addr) return;   // nothing new
     int ww, wh; SDL_GL_GetDrawableSize(g_win, &ww, &wh);
+    {   // widescreen: render at the window's aspect unless HM_ASPECT forces one (e.g. 4:3, 16:9, 1.78)
+        static float forced = -1;
+        if (forced < 0) {
+            forced = 0;
+            if (const char *a = getenv("HM_ASPECT")) { float x = 0, y = 0; if (sscanf(a, "%f:%f", &x, &y) == 2 && y > 0) forced = x / y; else forced = (float)atof(a); }
+        }
+        float asp = forced > 0 ? forced : (wh > 0 ? (float)ww / wh : 4.0f / 3.0f);
+        if (asp < 4.0f / 3.0f) asp = 4.0f / 3.0f;
+        gpu_set_aspect(asp);
+    }
     if (gpu_frame) gpu_present(ww, wh);
     else if (xfb && w > 0 && h > 0) gpu_present_ram_xfb(xfb, w, h, w, ww, wh);
     else return;
@@ -153,7 +164,7 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     int scale = getenv("HM_SCALE") ? atoi(getenv("HM_SCALE")) : 2;
-    g_win = SDL_CreateWindow("The Haunted Mansion", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640 * 3 / 2, 480 * 3 / 2,
+    g_win = SDL_CreateWindow("The Haunted Mansion", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720,
                              SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (getenv("HM_HIDDEN") ? SDL_WINDOW_HIDDEN : 0));
     if (!g_win) { fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError()); return 1; }
     g_gl = SDL_GL_CreateContext(g_win);

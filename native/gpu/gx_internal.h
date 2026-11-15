@@ -90,6 +90,7 @@ void flush_batch();
 void add_primitive(int prim, const Vertex *v, u32 count, const VtxComponents &comp);
 void efb_copy(u32 trigger);
 void present(int w, int h);
+void set_aspect(float a);
 void present_ram_xfb(u32 addr, int w, int h, int stride, int ww, int wh);
 u32 efb_peek(int x, int y, int is_z);
 void efb_poke(int x, int y, int is_z, u32 v);
