@@ -17,3 +17,5 @@
 8024150c bl mp_anim_request
 80241600 bl mp_anim_request
 802afaac word mp_load_level 800323C4   # Game: LoadLevel (room/level change) -> drop/carry player 2
+800586dc call mp_cmp_is_player 7c040040   # BTrgRegn: "sender is the player" also true for player 2
+80059374 call mp_cmp_is_player 7c040040   # BTrgRegn (leave): same

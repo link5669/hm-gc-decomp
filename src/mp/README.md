@@ -21,8 +21,10 @@ How it works (no game code or data moves):
   the screen splits vertically (player 1 left, player 2 right). Each half has a smoothed chase camera that always looks
   at its player, keeps 2.5-4 m away and uses the game's wall test (it rises above the player instead of going through
   walls). The screen merges again once both players have been well inside the shared view for 0.75 s.
-- Rooms: when either player triggers a room/level change, both go: player 2 is placed next to player 1 in the new
-  room and keeps their lives and health.
+- Rooms: when either player walks into a loading zone (player 2's body is registered in the level's collision pass,
+  and walk-in triggers accept both players), both go: player 2 is placed next to player 1 in the new room (on a free
+  spot, checked with the game's wall test) and keeps their lives and health. Game over / quitting to the title ends
+  co-op on the title screen; the next game starts player 2 fresh.
 - Unplugging controller 2 ends co-op (player 2 stops).
 
 ## Building a disc image
@@ -32,8 +34,8 @@ copy `build/GHYE6S/main_mp.dol` to `extracted/sys/main.dol`, and run
 
 ## Known limitations
 - Enemies, scripted events and level triggers still focus on player 1 (they track the game's single "player").
-- Not tested yet: catching ghosts as player 2, player 2 alone walking into a loading zone (the first area's exits
-  were locked), player 1 game over with player 2 in.
+- Not verified yet: catching ghosts / hurting enemies as player 2 (enemies only came for player 1 in testing).
 - Camera metrics (debug): `MP_CFLAGS="-DMP_DEBUG_AUTOJOIN -DMP_DEBUG_CAM"` logs visibility/split/turn-rate stats.
 - A debug build (`MP_CFLAGS=-DMP_DEBUG_AUTOJOIN tools/mp/build.sh`) auto-joins player 2 with default names; Z on
-  controller 2 forces split screen, D-pad up teleports player 2 to player 1, D-pad down knocks player 2 out, X loads the Ballroom (level-change test).
+  controller 2 teleports player 1 to player 2, D-pad up teleports player 2 to player 1, D-pad down knocks player 2 out,
+  D-pad left knocks player 1 out, D-pad right teleports player 2 to the next test actor, X loads the Ballroom.

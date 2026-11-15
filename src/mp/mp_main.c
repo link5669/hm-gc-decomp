@@ -25,8 +25,11 @@ void mp_game_render(void *game, void *gx)
     mp_game = game;
     mp_render_frame++;
     mp_main_cam = *(void **)((u8 *)game + 0x28);
-    if (mp.mode == MP_COOP && mp_player[1] && mp_render_frame - mp_player_seen[1] <= 2)
-        split = mp_coop_render(game, gx);
+    {
+        extern int mp_in_title;
+        if (mp.mode == MP_COOP && mp_player[1] && !mp_in_title && mp_render_frame - mp_player_seen[1] <= 2)
+            split = mp_coop_render(game, gx);
+    }
     if (!split)
         fn_800326D0(game, gx);
     mp_debug_mtx();
@@ -130,7 +133,8 @@ int mp_in_gameplay(void)
     u8 *cine = mp_game ? *(u8 **)((u8 *)mp_game + 0xb70) : 0;
     int cinema = cine && (*(s32 *)(cine + 0x284) != 0 || *(f32 *)(cine + 0x290) != 0.0f);
     static u32 since, last_frame;
-    int ok = hud && p0 && lm && lm[0x1b8] != 0 && !cinema;
+    extern int mp_in_title;
+    int ok = hud && p0 && lm && lm[0x1b8] != 0 && !cinema && !mp_in_title;
     /* must hold for 2 s of rendered frames (cinematics play outside Game::Render, freezing these signals) */
     if (!ok || mp_render_frame - last_frame > 2)
         since = mp_render_frame;

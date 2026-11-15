@@ -119,7 +119,12 @@ def main():
             dol[o:o + 4] = struct.pack(">I", tgt)
             n += 1
             continue
-        if kind == "bl" and (old & 0xFC000003) != 0x48000001:
+        if kind == "call":  # replace any instruction (checked against an expected word) with a bl to a stub
+            exp = int(line.split()[3], 16) if len(line.split()) > 3 else None
+            if exp is not None and exp != old:
+                sys.exit(f"call site {site:#x} is {old:08x}, expected {exp:08x}")
+            kind = "bl"
+        elif kind == "bl" and (old & 0xFC000003) != 0x48000001:
             sys.exit(f"hook site {site:#x} is not a bl ({old:08x})")
         rel = tgt - site
         assert -0x2000000 <= rel < 0x2000000

@@ -49,6 +49,7 @@ static int s_ncloned;
 static void *clone_node(void *d);
 void fn_80190940(void *child, void *parent);
 void fn_8019B6B8(void *scene, void *node);
+void fn_8019B4B0(void *scene, void *node);  /* add node to the collision layer */
 
 /* Zeke's visible meshes are child nodes of the body node that share its model (flag 0x40000): clone them
    under player 2's body so they take player 2's pose. */
@@ -105,6 +106,14 @@ int mp_spawn_p2(void)
         if (!d)
             { spawn_statics_abort(); return 0; }
         clone_kids(d0, d);
+        /* collision: same masks as the original body, and register in the collision layer (layer 1) the way
+           the level loader does, so trigger regions / loading zones / pickups see player 2 */
+        U32(d, 0x5c) = U32(d0, 0x5c);
+        U32(d, 0x60) = U32(d0, 0x60);
+        if ((U32(d, 0) & 2) && PTR(d, 0x44) == 0 && PTR(d, 0x88) == 0)
+            fn_8019B4B0(PTR(lbl_8035B65C, 0xc), d);
+        fn_80190C98(d);
+        OSReport("[mp] p2 body collision: +44 %p flags %08x\n", PTR(d, 0x44), U32(d, 0));
         {
             u8 *m1 = PTR(d0, 0xa8), *m2 = PTR(d, 0xa8);
             OSReport("[mp] mdl d %p d2 %p | 24: %p %p | 90: %p %p\n", m1, m2, m1 ? PTR(m1, 0x24) : 0, m2 ? PTR(m2, 0x24) : 0,
@@ -376,15 +385,37 @@ void mp_anim_request(void *o, void *anim, f32 a, s32 u, s32 b, s32 c, s32 q, f32
 }
 
 /* Move player 2 next to player 1 (spawn, respawn, debug). */
+int fn_80264E0C(f32 *from, f32 *to, f32 *hit, f32 *normal, f32 *frac, int a, int b, int c, int d, int e, int f, int g,
+                int h, int i, int mask);
+
+/* Move player 2 next to player 1 (spawn, respawn, debug): try 8 spots around player 1 and take the first one
+   that the game's wall test says is reachable in a straight line (so player 2 never lands inside a wall). */
 void mp_teleport_p2_to_p1(void)
 {
-    f32 pos[3];
+    static const f32 off[8][2] = {{1.2f, 0.0f}, {-1.2f, 0.0f}, {0.0f, 1.2f}, {0.0f, -1.2f},
+                                  {0.85f, 0.85f}, {-0.85f, 0.85f}, {0.85f, -0.85f}, {-0.85f, -0.85f}};
+    f32 pos[3], a[3], b[3], hit[3], n[3], t;
     extern int mp_player_pos(void *player, f32 *pos);
     u8 *p2 = mp_player[1];
+    int k, found = -1;
     if (!p2 || !mp_player_pos(mp_player[0], pos))
         return;
-    pos[0] += 1.0f;
-    pos[1] += 0.5f;
+    for (k = 0; k < 8 && found < 0; k++) {
+        a[0] = pos[0]; a[1] = pos[1]; a[2] = pos[2] + 0.9f;
+        /* test a little further than the spot itself so player 2's body fits */
+        b[0] = pos[0] + off[k][0] * 1.4f; b[1] = pos[1] + off[k][1] * 1.4f; b[2] = a[2];
+        t = 1.0f;
+#ifdef MP_TEST_NO_TPRAY
+        found = 0;
+#else
+        if (!fn_80264E0C(a, b, hit, n, &t, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2))
+            found = k;
+#endif
+    }
+    if (found >= 0) {
+        pos[0] += off[found][0];
+        pos[1] += off[found][1];
+    }
     *(f32 *)(p2 + 0x44) = pos[0];
     *(f32 *)(p2 + 0x48) = pos[1];
     *(f32 *)(p2 + 0x4c) = pos[2];
@@ -482,6 +513,29 @@ void mp_update_p2(f32 dt)
         mp.debug_level = 0;
         mp_debug_load_level("BALLROOM");
     }
+    if (mp.debug_p1tp) {
+        mp.debug_p1tp = 0;
+        *(f32 *)((u8 *)mp_player[0] + 0x44) = *(f32 *)((u8 *)mp_player[1] + 0x44);
+        *(f32 *)((u8 *)mp_player[0] + 0x48) = *(f32 *)((u8 *)mp_player[1] + 0x48) + 1.0f;
+        *(f32 *)((u8 *)mp_player[0] + 0x4c) = *(f32 *)((u8 *)mp_player[1] + 0x4c);
+        OSReport("[mp] debug: player 1 teleported to player 2\n");
+        {
+            u8 *a = mp_player[0], *b = mp_player[1], *na = PTR(a, 0x9c), *nb = PTR(b, 0x9c);
+            OSReport("[mp] node owner P1 %p P2 %p | +228 %08x %08x | node fl %08x %08x | body %p %p | 48 %p %p\n",
+                     PTR(na, 0x3c), PTR(nb, 0x3c), U32(a, 0x228), U32(b, 0x228), U32(na, 0), U32(nb, 0), PTR(na, 0x30),
+                     PTR(nb, 0x30), PTR(na, 0x48), PTR(nb, 0x48));
+        }
+    }
+    if (mp.debug_tp) {
+        extern void mp_debug_tp_actor(void);
+        mp.debug_tp = 0;
+        mp_debug_tp_actor();
+    }
+    if (mp.debug_list) {  /* debug: knock player 1 out */
+        mp.debug_list = 0;
+        *(f32 *)((u8 *)mp_player[0] + 0x1ac) = 0.0f;
+        OSReport("[mp] debug: player 1 knocked out (lives %d)\n", PTR(mp_player[0], 0x540) ? *(s32 *)PTR(mp_player[0], 0x540) : -1);
+    }
     if (mp.debug_kill) {
         mp.debug_kill = 0;
         *(f32 *)((u8 *)mp_player[1] + 0x1ac) = 0.0f;
@@ -546,6 +600,7 @@ void mp_fill_p2_input(const PADStatus *st)
    its own world node in the collision pass), so whoever enters a loading zone takes both along. */
 void fn_800323C4(void *fw, void *name8);
 static s32 s_carry_lives = -1;
+int mp_in_title = 1;  /* current level is the title / front end (the game boots into it) */
 static f32 s_carry_hp = -1.0f;
 asm u32 mp_get_lr(void)
 {
@@ -561,6 +616,15 @@ void mp_load_level(void *fw, void *name8)
         s_carry_hp = *(f32 *)((u8 *)mp_player[1] + 0x1ac);
     }
     OSReport("[mp] level change to '%.8s' (player 2 carried: lives %d)\n", (char *)name8, s_carry_lives);
+    {
+        /* the title / front-end "level" has a Player of its own: no co-op there */
+        const char *n = (const char *)name8;
+        mp_in_title = (n[0] == 'T' && n[1] == 'I' && n[2] == 'T' && n[3] == 'L' && n[4] == 'E');
+        if (mp_in_title) {
+            s_carry_lives = -1;  /* back at the title: next game starts fresh */
+            s_carry_hp = -1.0f;
+        }
+    }
     mp_player[1] = 0;  /* everything of player 2 is freed with the level */
     mp_split_reset();
     fn_800323C4(fw, name8);
@@ -593,3 +657,22 @@ void mp_debug_load_level(const char *name)
         ((void (*)(void *, void *))PTR(PTR(fw, 0x2f0), 0x3c))(fw, key);
 }
 #endif
+
+/* Trigger regions (BTrgRegn) only react to "the player" (o72): `cmplw r4,r0` with r0 = o72. Replaced by a call
+   to this stub, which also reports "equal" when the sender (r4) is player 2, so either player can walk into
+   loading zones and other walk-in triggers. Preserves every register except cr0 (and LR, saved by the caller). */
+asm void mp_cmp_is_player(void)
+{
+    nofralloc
+    cmplw r4, r0
+    beqlr
+    stwu r1, -16(r1)
+    stw r11, 8(r1)
+    lis r11, mp_player@ha
+    addi r11, r11, mp_player@l
+    lwz r11, 4(r11)
+    cmplw r4, r11
+    lwz r11, 8(r1)
+    addi r1, r1, 16
+    blr
+}

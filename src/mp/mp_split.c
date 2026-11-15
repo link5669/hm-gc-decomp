@@ -452,6 +452,16 @@ int mp_coop_render(void *game, void *gx)
                     if (got >= cl - 0.01f && got >= 2.5f)
                         break;  /* unobstructed and far enough */
                 }
+                if (best < 1.6f) {
+                    /* boxed in: look straight down on the player from above */
+                    f32 up[3] = {0.0f, 0.0f, 1.0f}, ov[3];
+                    f32 got = wall_clip(head, up, 4.0f);
+                    for (i = 0; i < 3; i++)
+                        ov[i] = head[i] + d[i] * 0.4f;
+                    ov[2] = head[2] + (got > 1.2f ? got : 1.2f);
+                    for (i = 0; i < 3; i++)
+                        bestv[i] = ov[i];
+                }
                 for (i = 0; i < 3; i++)
                     eyes[k][i] = bestv[i];
             }

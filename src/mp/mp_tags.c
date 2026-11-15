@@ -80,8 +80,11 @@ void mp_draw_p2_hud(void)
     f32 hp, max, frac, x = 452.0f, y = 400.0f;
     char buf[16];
     int n;
-    if (!p2 || mp.mode != MP_COOP)
-        return;
+    {
+        extern int mp_in_title;
+        if (!p2 || mp.mode != MP_COOP || mp_in_title || mp_render_frame - mp_player_seen[1] > 2)
+            return;
+    }
     hp = *(f32 *)((u8 *)p2 + 0x1ac);
     max = *(f32 *)((u8 *)p2 + 0x1a8);
     frac = max > 0.0f ? hp / max : 0.0f;

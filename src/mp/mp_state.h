@@ -27,7 +27,7 @@ typedef struct MpState {
     u8 p2_rejoin;       /* player 2 (out of lives) pressed START */      /* player 2 asked to spawn (latched until the next player update) */
     u8 debug_split;
     u8 debug_hide;
-    u8 debug_teleport, debug_kill, debug_level;      /* debug: X on controller 2 cycles hiding P2's body / instance */     /* debug: Z on controller 2 toggles split screen */
+    u8 debug_teleport, debug_kill, debug_level, debug_list, debug_tp, debug_p1tp;      /* debug: X on controller 2 cycles hiding P2's body / instance */     /* debug: Z on controller 2 toggles split screen */
 } MpState;
 
 extern MpState mp;
