@@ -7,6 +7,7 @@
 s32 fn_800629DC(void *a, s32 b, s32 c);
 void fn_800326D0(void *game, void *gx);
 void mp_debug_mtx(void);
+int mp_coop_render(void *game, void *gx);
 
 /* Hook: first call in main(), before the game sets up its heaps. */
 s32 mp_hook_main_init(void *a, s32 b, s32 c)
@@ -19,22 +20,11 @@ s32 mp_hook_main_init(void *a, s32 b, s32 c)
 void mp_game_render(void *game, void *gx)
 {
     int split = 0;
+    extern void *mp_main_cam;
     mp_render_frame++;
-    if (mp.mode == MP_COOP && mp.debug_split) {
-        /* debug: second view = player 1's camera moved 400 units to its right */
-        void *cam1 = *(void **)((u8 *)game + 0x28);
-        if (cam1) {
-            f32 eye[3], r[3], u[3], f[3], at[3];
-            int i;
-            mp_cam_get_pos(cam1, eye);
-            mp_cam_get_basis(cam1, r, u, f);
-            for (i = 0; i < 3; i++) {
-                eye[i] += r[i] * (mp.debug_split == 2 ? 400.0f : 0.0f);
-                at[i] = eye[i] + f[i] * 100.0f;
-            }
-            split = mp_split_render(game, gx, eye, at);
-        }
-    }
+    mp_main_cam = *(void **)((u8 *)game + 0x28);
+    if (mp.mode == MP_COOP && mp_player[1] && mp_render_frame - mp_player_seen[1] <= 2)
+        split = mp_coop_render(game, gx);
     if (!split)
         fn_800326D0(game, gx);
     mp_debug_mtx();

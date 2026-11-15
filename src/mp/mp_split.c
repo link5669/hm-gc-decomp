@@ -20,6 +20,7 @@ extern u8 lbl_803286D0[];                                     /* transform op ta
 
 static Rect s_pane[2] = {{0, 0, 320, 480, 0.0f, 1.0f}, {320, 0, 640, 480, 0.0f, 1.0f}};
 static int s_pane_idx = -1, s_inworld;
+void *mp_main_cam;  /* camera of the current Render pass (Game+0x28); only its world pass is captured */
 static void *s_cam2;
 
 #define F32(p, o) (*(f32 *)((u8 *)(p) + (o)))
@@ -78,7 +79,7 @@ void mp_gx_beginpass(void *gx, void *cam, s32 flags, Rect *r)
         }
     }
     fn_801650F8(gx, cam, flags, r);
-    if (world)
+    if (world && cam == mp_main_cam)
         capture(gx, s_pane_idx > 0 ? 1 : 0);
 }
 
@@ -103,7 +104,7 @@ static void set_aspect(void *cam, f32 aspect)
 int mp_split_render(void *game, void *gx, const f32 *eye2, const f32 *at2)
 {
     void *cam1 = PTR(game, 0x28);
-    f32 up[3] = {0.0f, 1.0f, 0.0f};
+    f32 up[3] = {0.0f, 0.0f, -1.0f};  /* the world is Z-up; the look-at helper wants the negated up axis */
     f32 aspect1;
 
     if (!cam1)
@@ -124,10 +125,13 @@ int mp_split_render(void *game, void *gx, const f32 *eye2, const f32 *at2)
     set_aspect(cam1, aspect1 * 0.5f);
 
     s_pane_idx = 0;
+    mp_main_cam = cam1;
     fn_800326D0(game, gx);
     PTR(game, 0x28) = s_cam2;
     s_pane_idx = 1;
+    mp_main_cam = s_cam2;
     fn_800326D0(game, gx);
+    mp_main_cam = cam1;
     PTR(game, 0x28) = cam1;
     s_pane_idx = -1;
     s_inworld = 0;
@@ -136,3 +140,45 @@ int mp_split_render(void *game, void *gx, const f32 *eye2, const f32 *at2)
 }
 
 void *mp_split_cam2(void) { return s_cam2; }
+
+/* Split-screen policy: split when the players are far apart (with hysteresis), camera 2 follows
+   player 2 with the same offset and direction camera 1 has from player 1. */
+#define SPLIT_ON_DIST 9.0f
+#define SPLIT_OFF_DIST 6.0f
+extern f32 mp_view[2][16];
+extern u8 mp_have_mtx[2];
+static int s_split_on;
+
+int mp_coop_render(void *game, void *gx)
+{
+    f32 p1[3], p2[3], eye[3], fwd[3], eye2[3], at2[3], d2;
+    const f32 *v = mp_view[0];
+    int i;
+
+    if (!mp_player_pos(mp_player[0], p1) || !mp_player_pos(mp_player[1], p2) || !mp_have_mtx[0])
+        return 0;
+    d2 = (p1[0] - p2[0]) * (p1[0] - p2[0]) + (p1[1] - p2[1]) * (p1[1] - p2[1]) + (p1[2] - p2[2]) * (p1[2] - p2[2]);
+    if (mp.debug_split)
+        s_split_on = 1;
+    else if (d2 > SPLIT_ON_DIST * SPLIT_ON_DIST)
+        s_split_on = 1;
+    else if (d2 < SPLIT_OFF_DIST * SPLIT_OFF_DIST)
+        s_split_on = 0;
+    if (!s_split_on)
+        return 0;
+    /* camera 1 pose from its view matrix (rows = camera axes, looks down -row2) */
+    for (i = 0; i < 3; i++) {
+        eye[i] = -(v[0 + i] * v[3] + v[4 + i] * v[7] + v[8 + i] * v[11]);
+        fwd[i] = -v[8 + i];
+    }
+    for (i = 0; i < 3; i++) {
+        eye2[i] = p2[i] + (eye[i] - p1[i]);
+        at2[i] = eye2[i] + fwd[i] * 5.0f;
+    }
+    if ((mp_render_frame % 120) == 0)
+        OSReport("[mp] cam: p1 %d %d %d p2 %d %d %d eye %d %d %d fwd %d %d %d eye2 %d %d %d (x100)\n",
+                 (int)(p1[0] * 100), (int)(p1[1] * 100), (int)(p1[2] * 100), (int)(p2[0] * 100), (int)(p2[1] * 100),
+                 (int)(p2[2] * 100), (int)(eye[0] * 100), (int)(eye[1] * 100), (int)(eye[2] * 100), (int)(fwd[0] * 100),
+                 (int)(fwd[1] * 100), (int)(fwd[2] * 100), (int)(eye2[0] * 100), (int)(eye2[1] * 100), (int)(eye2[2] * 100));
+    return mp_split_render(game, gx, eye2, at2);
+}

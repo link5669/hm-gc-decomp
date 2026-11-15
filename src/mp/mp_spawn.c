@@ -9,6 +9,14 @@ int fn_80077010(void *pl);                                           /* Player: 
 void fn_80076E94(void *pl);                                          /* Player: post-load link */
 void fn_80074AF4(void *pl, f32 dt);                                  /* Player: update */
 
+void *__nw__FUl(u32 size);
+void *__ct__9C801883E0Fv(void *self);
+void fn_80188144(void *dst, void *world, void *src, int flags);  /* world node clone (model + body) */
+void fn_8019B7E8(void *scene, void *node);                       /* add node to the scene draw list */
+void fn_800F7EC0(void *heap);
+void fn_800F7E98(void);
+extern void *lbl_8035B320, *lbl_8035B460, *lbl_8035B65C;
+
 #define PTR(p, o) (*(void **)((u8 *)(p) + (o)))
 #define U32(p, o) (*(u32 *)((u8 *)(p) + (o)))
 
@@ -31,8 +39,27 @@ int mp_spawn_p2(void)
     d = PTR(p0, 0x9c);
     if (!q || !c || !d)
         return 0;
+    /* player 2 gets its own copy of the "zeke" world node (model instance + physics body) */
+    {
+        void *d2;
+        OSReport("[mp] spawn: zeke node %p +88 %p +30 %p\n", d, PTR(d, 0x88), PTR(d, 0x30));
+        fn_800F7EC0(lbl_8035B320);
+        d2 = __nw__FUl(0xcc);
+        if (d2)
+            __ct__9C801883E0Fv(d2);
+        fn_800F7E98();
+        if (!d2)
+            return 0;
+        fn_80188144(d2, PTR(lbl_8035B460, 8), d, 0);
+        U32(d2, 0) &= ~0x800u;
+        PTR(d2, 0x3c) = 0;
+        if (PTR(d2, 0x88) == 0)
+            fn_8019B7E8(PTR(lbl_8035B65C, 0xc), d2);
+        OSReport("[mp] spawn: cloned node %p (+30 %p +a8 %p)\n", d2, PTR(d2, 0x30), PTR(d2, 0xa8));
+        d = d2;
+    }
     saved48 = PTR(mgr, 0x48);
-    saved_owner = PTR(d, 0x3c);
+    saved_owner = PTR(PTR(p0, 0x9c), 0x3c);
     p1 = fn_8023CA4C(mgr, (void *)cls);
     OSReport("[mp] spawn: p0 %p -> pool gave %p (owner %p)\n", p0, p1, saved_owner);
     if (!p1 || p1 == p0)
@@ -40,14 +67,14 @@ int mp_spawn_p2(void)
     fn_80076FF0(p1, q, mgr, d, c);
     U32(mgr, 0x54)++;
     PTR(mgr, 0x48) = saved48;
-    PTR(d, 0x3c) = saved_owner;
+    PTR(PTR(p0, 0x9c), 0x3c) = saved_owner;
     for (i = 0; i < 8; i++)
         ((char *)p1 + 0x8c)[i] = name2[i];
     fn_80076E94(p1);
     OSReport("[mp] spawn: linked, +434 %p +424 %p\n", PTR(p1, 0x434), PTR(p1, 0x424));
     fn_80077010(p1);
     PTR(mgr, 0x48) = saved48;
-    PTR(d, 0x3c) = saved_owner;
+    PTR(PTR(p0, 0x9c), 0x3c) = saved_owner;
     mp_player[1] = p1;
     mp_player_seen[1] = mp_render_frame;
     for (i = 0; i < 0x54; i++)
