@@ -2,3 +2,11 @@
 800605d4 bl mp_hook_main_init   # main: first call (app init) -> run mod init first
 802afa90 word mp_game_render 800326D0   # Game vtable: Render(self, gx) -> wrapper that draws the mod overlay after it
 8014e480 bl mp_pad_read   # controller manager update: the game's only PADRead call
+80078c88 bl mp_player_created   # Player factory: init of a new Player
+80078bdc bl mp_player_created   # Player ctor (array/other path): init
+802c24a8 word mp_player_update 80074AF4   # Player vtable: per-frame update
+802e7b44 word mp_gx_beginpass 801650F8     # Gx vtable BeginPass: full-screen world passes -> current split pane
+802e7bd8 word mp_gx_setviewport 80163CB4   # Gx vtable SetViewport: same
+80032ba4 bl mp_hook_hud    # Game::Render: HUD (only in last split pass)
+80032bdc bl mp_hook_menu   # Game::Render: menus
+80032c44 bl mp_hook_fade   # Game::Render: fade overlay

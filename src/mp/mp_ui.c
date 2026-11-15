@@ -124,6 +124,8 @@ void mp_ui_update(void)
     case MP_COOP:
         if (!mp.in[1].connected)
             mp.mode = MP_SOLO;  /* player 2 left (controller unplugged) */
+        if (mp.in[1].pressed & PAD_TRIGGER_Z)
+            mp.debug_split = (mp.debug_split + 1) % 3;
         break;
     }
 }

@@ -22,6 +22,7 @@ typedef struct MpState {
     u8 named[2];
     MpInput in[2];
     u32 frame;
+    u8 debug_split;     /* debug: Z on controller 2 toggles split screen */
 } MpState;
 
 extern MpState mp;
