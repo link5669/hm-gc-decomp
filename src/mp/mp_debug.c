@@ -13,7 +13,7 @@ void mp_backtrace(const char *tag, u32 a, u32 b)
     u32 *sp = mp_get_sp();
     int i;
     OSReport("[mp] %s %08x %08x bt:", tag, a, b);
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 22; i++) {
         sp = (u32 *)sp[0];
         if ((u32)sp < 0x80000000 || (u32)sp >= 0x81800000 || ((u32)sp & 7))
             break;
@@ -51,7 +51,7 @@ void mp_debug_list_actors(void)
 extern void *mp_player[2];
 void mp_debug_tp_actor(void)
 {
-    static const char *names[] = {"FOYEtrig", "ghost1", "ghost2", "ghost0"};
+    static const char *names[] = {"spider0", "SpdrLrd0", "lilbat0", "spider1"};
     static int idx;
     u8 *mgr = *(u8 **)0x8035B308, *it, *o, *p2 = mp_player[1];
     const char *want = names[idx];
@@ -67,9 +67,9 @@ void mp_debug_tp_actor(void)
             ;
         if (k < 8 && want[k])
             continue;
-        *(f32 *)(p2 + 0x44) = *(f32 *)(o + 0x44) + (want[0] == 'g' ? 1.5f : 0.0f);
+        *(f32 *)(p2 + 0x44) = *(f32 *)(o + 0x44) + (1.5f);
         *(f32 *)(p2 + 0x48) = *(f32 *)(o + 0x48);
-        *(f32 *)(p2 + 0x4c) = want[0] == 'g' ? 0.0f : *(f32 *)(o + 0x4c);
+        *(f32 *)(p2 + 0x4c) = *(f32 *)(o + 0x4c);
         OSReport("[mp] debug: player 2 teleported to '%s' (%d %d %d)\n", want, (int)(*(f32 *)(o + 0x44) * 10),
                  (int)(*(f32 *)(o + 0x48) * 10), (int)(*(f32 *)(o + 0x4c) * 10));
         return;

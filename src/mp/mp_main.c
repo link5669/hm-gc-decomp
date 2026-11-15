@@ -112,13 +112,14 @@ void mp_player_update(void *player, f32 dt)
 }
 
 void fn_80228A48(void *mgr, f32 dt);
+void mp_actor_update_coop(void *mgr, f32 dt);
 
 /* Hook: per-frame actor update (players, enemies, objects). Paused while a player types a name. */
 void mp_actor_update(void *mgr, f32 dt)
 {
     if (mp.mode == MP_NAMING)
         return;
-    fn_80228A48(mgr, dt);
+    mp_actor_update_coop(mgr, dt);
 }
 
 extern u32 mp_hud_seen;

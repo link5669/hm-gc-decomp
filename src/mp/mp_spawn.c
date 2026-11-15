@@ -37,6 +37,7 @@ static void apply_carry(void *p1);
 static void repoint(void *obj, u32 size, void *from, void *to);
 static int s_place_p2;  /* put player 2 next to player 1 before its next update */
 static void give_p2_lantern(void *p0, void *p1);
+static void *s_lantern2;
 static void give_p2_camera(void *p0, void *p1);
 static void give_p2_nodes(void *p0, void *p1);
 void mp_teleport_p2_to_p1(void);
@@ -305,7 +306,6 @@ static void repoint(void *obj, u32 size, void *from, void *to)
             *(void **)((u8 *)obj + i) = to;
 }
 
-static void *s_lantern2;
 void *mp_gamecam2;  /* player 2's own follow camera actor (clone of "GameCam") */
 void fn_80223A50(void *cam, f32 dt);  /* Camera actor update */
 
@@ -421,6 +421,36 @@ void mp_teleport_p2_to_p1(void)
     *(f32 *)(p2 + 0x4c) = pos[2];
 }
 
+/* Cutscenes animate "the player" and would drag player 2 along into the same spot: player 2 is hidden and paused
+   while the cinema letterbox is up, and comes back next to player 1 afterwards. */
+static int s_p2_hidden;
+static void p2_set_visible(int show)
+{
+    void *scene = PTR(lbl_8035B65C, 0xc), *nodes[2];
+    int i;
+    nodes[0] = PTR(mp_player[1], 0x9c);
+    nodes[1] = s_lantern2 ? PTR(s_lantern2, 0x9c) : 0;
+    for (i = 0; i < 2; i++) {
+        void *n = nodes[i];
+        if (!n)
+            continue;
+        if (show) {
+            U32(n, 0) |= 0x4000u;
+            if (PTR(n, 0x48) == 0)
+                fn_8019B7E8(scene, n);
+        } else {
+            U32(n, 0) &= ~0x4000u;
+            fn_8019B6B8(scene, n);
+        }
+    }
+}
+
+static int in_cutscene(void)
+{
+    u8 *cine = mp_game ? PTR(mp_game, 0xb70) : 0;
+    return cine && (*(s32 *)(cine + 0x284) != 0 || *(f32 *)(cine + 0x290) != 0.0f);
+}
+
 /* Called right after player 1's update each frame. */
 void mp_update_p2(f32 dt)
 {
@@ -429,6 +459,31 @@ void mp_update_p2(f32 dt)
     int i;
     if (!mp_player[1])
         return;
+#ifdef MP_DEBUG_AUTOJOIN
+    {
+        static f32 last1 = -1.0f, last2 = -1.0f;
+        f32 h1 = *(f32 *)((u8 *)mp_player[0] + 0x1ac), h2 = *(f32 *)((u8 *)mp_player[1] + 0x1ac);
+        if (last1 >= 0.0f && h1 < last1)
+            OSReport("[mp] DAMAGE player 1: %d -> %d\n", (int)last1, (int)h1);
+        if (last2 >= 0.0f && h2 < last2)
+            OSReport("[mp] DAMAGE player 2: %d -> %d\n", (int)last2, (int)h2);
+        last1 = h1;
+        last2 = h2;
+    }
+#endif
+    if (in_cutscene()) {
+        if (!s_p2_hidden) {
+            s_p2_hidden = 1;
+            p2_set_visible(0);
+        }
+        mp_player_seen[1] = mp_render_frame - 10;  /* no tag / split for player 2 during the cutscene */
+        return;
+    }
+    if (s_p2_hidden) {
+        s_p2_hidden = 0;
+        p2_set_visible(1);
+        s_place_p2 = 1;
+    }
     if (*(f32 *)((u8 *)mp_player[1] + 0x1ac) <= 0.0f) {
         /* player 2 was knocked out: lose a life and come back at full health (no global death event).
            Out of lives: player 2 sits out (see HUD). */
@@ -626,6 +681,10 @@ void mp_load_level(void *fw, void *name8)
         }
     }
     mp_player[1] = 0;  /* everything of player 2 is freed with the level */
+    {
+        extern void mp_enemies_reset(void);
+        mp_enemies_reset();  /* all actors are freed too */
+    }
     mp_split_reset();
     fn_800323C4(fw, name8);
 }

@@ -19,3 +19,13 @@
 802afaac word mp_load_level 800323C4   # Game: LoadLevel (room/level change) -> drop/carry player 2
 800586dc call mp_cmp_is_player 7c040040   # BTrgRegn: "sender is the player" also true for player 2
 80059374 call mp_cmp_is_player 7c040040   # BTrgRegn (leave): same
+80226134 call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+80226150 call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+80226230 call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+80226258 call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+802263c0 call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+80226528 call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+8022658c call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+802265ac call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+802265f8 call mp_coll_call 4e800421   # collision pass: per-pair event (o72 = player 2 when involved)
+80222b24 call mp_actor_event_call 4e800421   # animation event -> actor (enemy bites use the enemy target)
