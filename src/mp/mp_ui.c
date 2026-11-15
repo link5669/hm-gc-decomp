@@ -1,6 +1,7 @@
 /* Multiplayer mod: join flow and on-screen keyboard for player names. */
 #include <dolphin/pad.h>
 #include "mp_state.h"
+#include "mp.h"
 #include "mp_draw.h"
 
 #define KB_COLS 10
@@ -137,6 +138,10 @@ void mp_ui_update(void)
     case MP_COOP:
         if (!mp.in[1].connected)
             mp.mode = MP_SOLO;  /* player 2 left (controller unplugged) */
+        if (mp.in[1].pressed & PAD_BUTTON_Y) {
+            mp.want_spawn = 1;
+            OSReport("[mp] P2 pressed Y: spawn requested\n");
+        }
         if (mp.in[1].pressed & PAD_TRIGGER_Z)
             mp.debug_split = (mp.debug_split + 1) % 3;
         break;

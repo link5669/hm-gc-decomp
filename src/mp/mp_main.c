@@ -76,6 +76,9 @@ static void mp_dump_players(void *p0)
     }
 }
 static void *s_updated[8];
+int mp_spawn_p2(void);
+void mp_update_p2(f32 dt);
+void *fn_800F9398(void *table, const char *name);
 static int s_nupdated;
 
 /* Hook: Player vtable slot "update" (per frame). Debug: log which Player instances are updated. */
@@ -88,14 +91,30 @@ void mp_player_update(void *player, f32 dt)
     if (i == s_nupdated && s_nupdated < 8) {
         s_updated[s_nupdated++] = player;
         mp_backtrace("Player update", (u32)player, (u32)s_nupdated);
-        if (s_nupdated == 1)
-            mp_dump_players(player);
+        if (s_nupdated == 1) {
+            u8 *d = *(u8 **)((u8 *)player + 0x9c);
+            u8 *w = *(u8 **)(*(u8 **)0x8035B460 + 8);
+            void *t = fn_800F9398(w + 0x90, (char *)player + 0x8c);
+            OSReport("[mp] P0 %p d %p type %d d[0] %08x d+4 %08x name '%.8s' tmpl %p q %p c %p\n", player, d,
+                     d ? *(u16 *)(d + 4) : -1, d ? *(u32 *)d : 0, d ? *(u32 *)(d + 4) : 0, (char *)player + 0x8c, t,
+                     *(void **)((u8 *)player + 0xc), *(void **)((u8 *)player + 0x10));
+        }
     }
-    if (player != mp_player[1]) {
-        mp_player[0] = player;
-        mp_player_seen[0] = mp_render_frame;
-    } else {
-        mp_player_seen[1] = mp_render_frame;
+    if (player == mp_player[1]) {  /* normally unreachable: player 2 is updated by mp_update_p2 */
+        fn_80074AF4(player, dt);
+        return;
     }
+    if (player != mp_player[0]) {
+        mp_player[0] = player;     /* new level: the old player 2 died with the old pool */
+        mp_player[1] = 0;
+    }
+    mp_player_seen[0] = mp_render_frame;
     fn_80074AF4(player, dt);
+    if (mp.want_spawn) {
+        mp.want_spawn = 0;
+        OSReport("[mp] spawn request: mode %d p1 %p\n", mp.mode, mp_player[1]);
+        if (mp.mode == MP_COOP && !mp_player[1])
+            mp_spawn_p2();
+    }
+    mp_update_p2(dt);
 }
