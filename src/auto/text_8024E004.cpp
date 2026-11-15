@@ -50,8 +50,7 @@ static inline u8 *Find(Pb *p, char *name, char *lbl) {
 }
 static inline Nd *Sub(Nd *x) { return x->f28 == 2 ? x->f108[x->f44] : 0; }
 static inline Nd *Res(Nd *x) {
-    if (x->f40) x = Sub(x);
-    return x;
+    return x->f40 == 0 ? x : Sub(x);
 }
 extern "C" void fn_8024E004(Pb *p, char *name, s32 mode, char *a, char *b) {
     C8023C7CC top;
