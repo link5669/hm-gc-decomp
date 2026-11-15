@@ -17,9 +17,12 @@ How it works (no game code or data moves):
   buttons as player 1). Both players act separately but share the ghosts-needed / ghosts-found totals.
 - Each player has their own health and lives. Player 2's bar and lives are at the bottom right. When knocked out,
   player 2 loses a life and comes back next to player 1 (no game over). Out of lives: START rejoins with 3 lives.
-- Names are shown above each player's head. If either player is not visible on the shared screen, the screen splits
-  vertically (player 1 left, player 2 right, each with their own follow camera); it merges again once both are
-  comfortably visible.
+- Names are shown above each player's head. If either player has been off the shared screen for a third of a second,
+  the screen splits vertically (player 1 left, player 2 right). Each half has a smoothed chase camera that always looks
+  at its player, keeps 2.5-4 m away and uses the game's wall test (it rises above the player instead of going through
+  walls). The screen merges again once both players have been well inside the shared view for 0.75 s.
+- Rooms: when either player triggers a room/level change, both go: player 2 is placed next to player 1 in the new
+  room and keeps their lives and health.
 - Unplugging controller 2 ends co-op (player 2 stops).
 
 ## Building a disc image
@@ -29,6 +32,8 @@ copy `build/GHYE6S/main_mp.dol` to `extracted/sys/main.dol`, and run
 
 ## Known limitations
 - Enemies, scripted events and level triggers still focus on player 1 (they track the game's single "player").
-- Not tested yet: catching ghosts as player 2, level transitions through doors, player 1 game over with player 2 in.
+- Not tested yet: catching ghosts as player 2, player 2 alone walking into a loading zone (the first area's exits
+  were locked), player 1 game over with player 2 in.
+- Camera metrics (debug): `MP_CFLAGS="-DMP_DEBUG_AUTOJOIN -DMP_DEBUG_CAM"` logs visibility/split/turn-rate stats.
 - A debug build (`MP_CFLAGS=-DMP_DEBUG_AUTOJOIN tools/mp/build.sh`) auto-joins player 2 with default names; Z on
-  controller 2 forces split screen, D-pad up teleports player 2 to player 1, D-pad down knocks player 2 out.
+  controller 2 forces split screen, D-pad up teleports player 2 to player 1, D-pad down knocks player 2 out, X loads the Ballroom (level-change test).
