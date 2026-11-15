@@ -6,7 +6,8 @@
 void *fn_8023CA4C(void *mgr, void *classKey);                       /* pool: first free item of class */
 void fn_80076FF0(void *pl, void *q, void *mgr, void *node, void *c);  /* Player: bind data + world node */
 int fn_80077010(void *pl);                                           /* Player: Start */
-void fn_80076E94(void *pl);                                          /* Player: post-load link */
+void fn_80076E94(void *pl);
+void fn_80078980(void *pl);  /* Player: stop */                                          /* Player: post-load link */
 void fn_80074AF4(void *pl, f32 dt);                                  /* Player: update */
 
 void *__nw__FUl(u32 size);
@@ -34,6 +35,36 @@ void fn_80187EE0(void *node, f32 dt);
 static void *s_cloned[24];
 static int s_ncloned;
 static void *clone_node(void *d);
+void fn_80190940(void *child, void *parent);
+void fn_8019B6B8(void *scene, void *node);
+
+/* Zeke's visible meshes are child nodes of the body node that share its model (flag 0x40000): clone them
+   under player 2's body so they take player 2's pose. */
+static void clone_kids(void *d, void *d2)
+{
+    void *k, *k2;
+    int n = 0;
+    for (k = PTR(d, 0x58); k && n < 16; k = PTR(k, 0x54), n++) {
+        OSReport("[mp] kid %p type %d fl %08x a8 %p (parent a8 %p) 88 %p\n", k, *(u16 *)((u8 *)k + 4), U32(k, 0),
+                 PTR(k, 0xa8), PTR(d, 0xa8), PTR(k, 0x88));
+        if (*(u16 *)((u8 *)k + 4) != 3)
+            continue;
+        fn_800F7EC0(lbl_8035B320);
+        k2 = __nw__FUl(0xcc);
+        if (k2)
+            __ct__9C801883E0Fv(k2);
+        fn_800F7E98();
+        if (!k2)
+            continue;
+        fn_80188144(k2, PTR(lbl_8035B460, 8), k, (int)((U32(k, 0) & 0x40000) ? d2 : 0));
+        U32(k2, 0) &= ~0x800u;
+        PTR(k2, 0x3c) = 0;
+        fn_80190940(k2, d2);
+        if (PTR(k2, 0x88) == 0)
+            fn_8019B7E8(PTR(lbl_8035B65C, 0xc), k2);
+        OSReport("[mp]   -> %p a8 %p (d2 a8 %p)\n", k2, PTR(k2, 0xa8), PTR(d2, 0xa8));
+    }
+}
 s32 mp_p2_lives, mp_p2_hp, mp_p2_maxhp, mp_p2_respawns;
 void fn_8006B6C8(void *pl);  /* Player: full heal */
 
@@ -54,9 +85,21 @@ int mp_spawn_p2(void)
         return 0;
     /* player 2 gets its own copy of the "zeke" world node (model instance + physics body) */
     s_ncloned = 0;
-    d = clone_node(d);
-    if (!d)
-        return 0;
+    {
+        void *d0 = d;
+        d = clone_node(d0);
+        if (!d)
+            return 0;
+        clone_kids(d0, d);
+        {
+            u8 *m1 = PTR(d0, 0xa8), *m2 = PTR(d, 0xa8);
+            OSReport("[mp] mdl d %p d2 %p | 24: %p %p | 90: %p %p\n", m1, m2, m1 ? PTR(m1, 0x24) : 0, m2 ? PTR(m2, 0x24) : 0,
+                     PTR(d0, 0x90), PTR(d, 0x90));
+            if (m1 && m2 && PTR(m1, 0x24) && PTR(m2, 0x24))
+                OSReport("[mp] elem0 10/14: %p %p | %p %p\n", PTR(PTR(m1, 0x24), 0x10), PTR(PTR(m1, 0x24), 0x14),
+                         PTR(PTR(m2, 0x24), 0x10), PTR(PTR(m2, 0x24), 0x14));
+        }
+    }
 #ifdef MP_TEST_HIDE_BODY
     U32(d, 0) |= 0x800u;
 #endif
@@ -78,6 +121,7 @@ int mp_spawn_p2(void)
     {
         s32 *v540 = PTR(p0, 0x540), *v544 = PTR(p0, 0x544), *v548 = PTR(p0, 0x548);
         s32 l = v540 ? *v540 : 0, h = v544 ? *v544 : 0, m = v548 ? *v548 : 0;
+
         fn_80077010(p1);
         if (v540) *v540 = l;
         if (v544) *v544 = h;
@@ -101,6 +145,25 @@ int mp_spawn_p2(void)
     /* player 2 starts at the level's spawn point (placed by the link step) */
     for (i = 0; i < 0x54; i++)
         s_p2_input[i] = INPUT_STRUCT()[i];
+    {
+        u8 *pl1 = PTR(p0, 0xb8), *pl2 = PTR(p1, 0xb8);
+        OSReport("[mp] anim link P1 b8 %p idx %d own %p | P2 b8 %p idx %d own %p | P2 b0 %d\n", pl1, pl1 ? U32(pl1, 8) : -1,
+                 pl1 ? PTR(pl1, 0xc) : 0, pl2, pl2 ? U32(pl2, 8) : -1, pl2 ? PTR(pl2, 0xc) : 0, U32(p1, 0xb0));
+    }
+    {
+        u8 *b2 = PTR(p1, 0x20c), *b1 = PTR(p0, 0x20c);
+        u32 i2;
+        OSReport("[mp] BPlayer2 e0 %p 118 %p | BPlayer1 e0 %p 118 %p\n", b2 ? PTR(b2, 0xe0) : 0, b2 ? PTR(b2, 0x118) : 0,
+                 b1 ? PTR(b1, 0xe0) : 0, b1 ? PTR(b1, 0x118) : 0);
+        if (b2)
+            for (i2 = 0; i2 < 0x2a0; i2 += 4) {
+                u8 *o = PTR(b2, i2);
+                if ((u32)o >= 0x80400000 && (u32)o < 0x81800000 && ((u32)o & 3) == 0 && PTR(o, 0xe0) == p0)
+                    OSReport("[mp] BPlayer2 +%03x -> %p whose owner(+e0) is P1 (vt %p)\n", i2, o, *(void **)o);
+            }
+    }
+    OSReport("[mp] bplayer P1 %p vt %p | P2 %p vt %p\n", PTR(p0, 0x20c), PTR(p0, 0x20c) ? *(void **)PTR(p0, 0x20c) : 0,
+             PTR(p1, 0x20c), PTR(p1, 0x20c) ? *(void **)PTR(p1, 0x20c) : 0);
     OSReport("[mp] spawn: player 2 is %p  9c %p a0 %p 424 %p | P1 9c %p a0 %p 424 %p\n", p1, PTR(p1, 0x9c), PTR(p1, 0xa0),
              PTR(p1, 0x424), PTR(p0, 0x9c), PTR(p0, 0xa0), PTR(p0, 0x424));
     return 1;
@@ -248,6 +311,23 @@ static void give_p2_nodes(void *p0, void *p1)
     }
 }
 
+/* Animation requests (fn_8022CC44) made while player 2 updates must go to player 2: its movement modules
+   resolve their owner the single-player way and would animate player 1. */
+static int s_in_p2;
+void fn_8022CC44(void *o, void *anim, f32 a, s32 u, s32 b, s32 c, s32 q, f32 d);
+void mp_anim_request(void *o, void *anim, f32 a, s32 u, s32 b, s32 c, s32 q, f32 d)
+{
+    static int logged;
+    if (s_in_p2 && o == mp_player[0] && mp_player[1]) {
+        if (logged < 3) {
+            OSReport("[mp] anim request for P1 during P2 update -> P2 (anim %p)\n", anim);
+            logged++;
+        }
+        o = mp_player[1];
+    }
+    fn_8022CC44(o, anim, a, u, b, c, q, d);
+}
+
 /* Called right after player 1's update each frame. */
 void mp_update_p2(f32 dt)
 {
@@ -285,8 +365,10 @@ void mp_update_p2(f32 dt)
         in[i] = s_p2_input[i];
     }
     o72 = PTR(mgr, 0x48);
-    /* (o72 stays player 1: swapping it froze player 2) */
+    /* o72 stays player 1 (swapping it routed player 2 input to player 1) */
+    s_in_p2 = 1;
     fn_80074AF4(mp_player[1], dt);
+    s_in_p2 = 0;
     PTR(mgr, 0x48) = o72;
     for (i = 0; i < 0x54; i++) {
         s_p2_input[i] = in[i];
@@ -307,6 +389,28 @@ void mp_update_p2(f32 dt)
                  PTR(d2, 0xb0), (int)(*(f32 *)((u8 *)PTR(d2, 0xb0) + 4) * 100), PTR(d1, 0x88), PTR(d1, 0xb0), (int)(*(f32 *)((u8 *)PTR(d1, 0xb0) + 4) * 100),
                  (int)(dt * 1000), s_ncloned);
     }
+#ifdef MP_DEBUG_AUTOJOIN
+    if (0 && (mp_render_frame % 20) == 0) {
+        int k;
+        for (k = 0; k < 2; k++) {
+            u8 *P = mp_player[k], *pl = PTR(P, 0xb8), *tb = PTR(PTR(P, 0xa0), 0xb0), *t, *beh = PTR(P, 0x20c);
+            u32 ix = pl ? U32(pl, 8) : 0;
+            t = tb + ix * 0x3c;
+            OSReport("[mp] P%d ix %d clip %p t %d spd %d fl %x w %d | vel %d %d %d k1a0 %d | stick %d %d | st %d\n", k + 1, ix,
+                     PTR(t, 0x10), (int)(*(f32 *)(t + 4) * 100), (int)(*(f32 *)(t + 8) * 100), U32(t, 0),
+                     (int)(*(f32 *)(t + 0x28) * 100), (int)(*(f32 *)(P + 0x118) * 100), (int)(*(f32 *)(P + 0x11c) * 100),
+                     (int)(*(f32 *)(P + 0x120) * 100), (int)(*(f32 *)(P + 0x1a0) * 100), (int)(*(f32 *)(P + 0x500) * 100),
+                     (int)(*(f32 *)(P + 0x504) * 100), beh ? U32(beh, 0xdc) : -1);
+        }
+    }
+    if (mp.debug_hide) {
+        void *hn = mp.debug_hide == 1 ? PTR(mp_player[1], 0xa0) : PTR(mp_player[1], 0x424);
+        if (hn) {
+            U32(hn, 0) &= ~0x4000u;
+            fn_8019B6B8(PTR(lbl_8035B65C, 0xc), hn);
+        }
+    }
+#endif
     statics_save(&s_p2_statics);
     statics_load(&s_p1_statics);
     mp_player_seen[1] = mp_render_frame;

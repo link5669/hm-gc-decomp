@@ -66,10 +66,8 @@ void mp_update_p2(f32 dt);
 /* Hook: Player vtable slot "update" (per frame): tracks player 1, spawns and updates player 2. */
 void mp_player_update(void *player, f32 dt)
 {
-    if (player == mp_player[1]) {  /* normally unreachable: player 2 is updated by mp_update_p2 */
-        fn_80074AF4(player, dt);
+    if (player == mp_player[1])  /* player 2 is updated only by mp_update_p2 (with its own input) */
         return;
-    }
     if (player != mp_player[0]) {
         mp_player[0] = player;     /* new level: the old player 2 died with the old pool */
         mp_player[1] = 0;

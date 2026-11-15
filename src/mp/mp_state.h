@@ -24,7 +24,8 @@ typedef struct MpState {
     u32 frame;
     u8 join_pending;    /* player 2 pressed START in a menu: start naming when gameplay begins */
     u8 want_spawn;      /* player 2 asked to spawn (latched until the next player update) */
-    u8 debug_split;     /* debug: Z on controller 2 toggles split screen */
+    u8 debug_split;
+    u8 debug_hide;      /* debug: X on controller 2 cycles hiding P2's body / instance */     /* debug: Z on controller 2 toggles split screen */
 } MpState;
 
 extern MpState mp;

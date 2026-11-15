@@ -11,3 +11,8 @@
 80032bdc bl mp_hook_menu   # Game::Render: menus
 80032c44 bl mp_hook_fade   # Game::Render: fade overlay
 80254380 bl mp_actor_update   # frame: actor update (paused during name entry)
+800a45f8 bl mp_anim_request   # anim clip bind (redirected to player 2 while it updates)
+8022d190 bl mp_anim_request
+802414c0 bl mp_anim_request
+8024150c bl mp_anim_request
+80241600 bl mp_anim_request

@@ -153,6 +153,8 @@ void mp_ui_update(void)
 #ifdef MP_DEBUG_AUTOJOIN
         if (mp.in[1].pressed & PAD_TRIGGER_Z)
             mp.debug_split ^= 1;  /* debug: force split screen */
+        if (mp.in[1].pressed & PAD_BUTTON_X)
+            mp.debug_hide = (mp.debug_hide + 1) % 3;
 #endif
         break;
     }
