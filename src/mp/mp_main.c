@@ -6,6 +6,7 @@
 
 s32 fn_800629DC(void *a, s32 b, s32 c);
 void fn_800326D0(void *game, void *gx);
+void mp_debug_mtx(void);
 
 /* Hook: first call in main(), before the game sets up its heaps. */
 s32 mp_hook_main_init(void *a, s32 b, s32 c)
@@ -18,6 +19,7 @@ s32 mp_hook_main_init(void *a, s32 b, s32 c)
 void mp_game_render(void *game, void *gx)
 {
     int split = 0;
+    mp_render_frame++;
     if (mp.mode == MP_COOP && mp.debug_split) {
         /* debug: second view = player 1's camera moved 400 units to its right */
         void *cam1 = *(void **)((u8 *)game + 0x28);
@@ -35,20 +37,30 @@ void mp_game_render(void *game, void *gx)
     }
     if (!split)
         fn_800326D0(game, gx);
+    mp_debug_mtx();
     mp_draw_begin();
+    if (mp.mode == MP_COOP) {
+        if (split) {
+            mp_draw_tags(*(void **)((u8 *)game + 0x28), 0.0f, 0.0f, 320.0f, 480.0f);
+            mp_draw_tags(mp_split_cam2(), 320.0f, 0.0f, 320.0f, 480.0f);
+            mp_draw_box(319.0f, 0.0f, 2.0f, 480.0f, 0x000000FF);
+        } else {
+            mp_draw_tags(*(void **)((u8 *)game + 0x28), 0.0f, 0.0f, 640.0f, 480.0f);
+        }
+    }
     mp_ui_draw();
 }
 
 void fn_800786B8(void *player);
 void *mp_player[2];
+u32 mp_player_seen[2];  /* render frame in which each player was last updated */
+u32 mp_render_frame;
 
 /* Hook: Player factory -> Player init. Records created players (debug: logs who created them). */
 void mp_player_created(void *player)
 {
     fn_800786B8(player);
-    mp_backtrace("Player created", (u32)player, 0);
-    if (!mp_player[0])
-        mp_player[0] = player;
+    (void)player;
 }
 
 void fn_80074AF4(void *player, f32 dt);
@@ -78,6 +90,12 @@ void mp_player_update(void *player, f32 dt)
         mp_backtrace("Player update", (u32)player, (u32)s_nupdated);
         if (s_nupdated == 1)
             mp_dump_players(player);
+    }
+    if (player != mp_player[1]) {
+        mp_player[0] = player;
+        mp_player_seen[0] = mp_render_frame;
+    } else {
+        mp_player_seen[1] = mp_render_frame;
     }
     fn_80074AF4(player, dt);
 }

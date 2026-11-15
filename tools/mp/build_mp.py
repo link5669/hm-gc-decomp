@@ -65,7 +65,7 @@ def main():
     for f in sorted(os.listdir(os.path.join(ROOT, "src/mp"))):
         if f.endswith(".c"):
             o = os.path.join(OUT, f[:-2] + ".o")
-            run(MWCC + CFLAGS + ["-c", f"src/mp/{f}", "-o", o])
+            run(MWCC + CFLAGS + os.environ.get("MP_CFLAGS", "").split() + ["-c", f"src/mp/{f}", "-o", o])
             objs.append(o)
 
     lds = os.path.join(OUT, "mp.ld")

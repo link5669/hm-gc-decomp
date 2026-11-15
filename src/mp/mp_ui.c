@@ -101,6 +101,19 @@ void mp_ui_update(void)
 
     switch (mp.mode) {
     case MP_SOLO:
+#ifdef MP_DEBUG_AUTOJOIN
+        if (mp.in[1].connected && !mp.named[1]) {
+            int k;
+            for (k = 0; k < 2; k++) {
+                const char *d = k ? "GHOST" : "ZEKE";
+                int n = 0;
+                while (d[n]) { mp.name[k][n] = d[n]; n++; }
+                mp.name[k][n] = 0;
+                mp.named[k] = 1;
+            }
+            mp.mode = MP_COOP;
+        }
+#endif
         /* Player 2 joins by pressing START on controller 2. Player 1 names themself first if not named yet. */
         if (mp.in[1].connected && (mp.in[1].pressed & PAD_BUTTON_START))
             start_naming(mp.named[0] ? 1 : 0);

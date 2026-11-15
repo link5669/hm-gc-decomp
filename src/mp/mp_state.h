@@ -26,6 +26,8 @@ typedef struct MpState {
 } MpState;
 
 extern MpState mp;
+extern void *mp_player[2];
+extern u32 mp_player_seen[2], mp_render_frame;
 
 void mp_ui_update(void);
 void mp_ui_draw(void);

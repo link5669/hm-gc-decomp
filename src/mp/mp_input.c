@@ -35,6 +35,7 @@ static void blank(PADStatus *st)
 u32 mp_pad_read(PADStatus *st)
 {
     u32 r = PADRead(st);
+    int was_naming = (mp.mode == MP_NAMING);
     mp.frame++;
     track(&mp.in[0], &st[0]);
     track(&mp.in[1], &st[1]);
@@ -46,7 +47,7 @@ u32 mp_pad_read(PADStatus *st)
         last0 = st[0].err; last1 = st[1].err;
     }
     /* The game must not see menu input while a player types a name, and port 2 never drives Zeke 1. */
-    if (mp.mode == MP_NAMING && st[0].err == PAD_ERR_NONE)
+    if ((was_naming || mp.mode == MP_NAMING) && st[0].err == PAD_ERR_NONE)
         blank(&st[0]);
     if (st[1].err == PAD_ERR_NONE)
         blank(&st[1]);

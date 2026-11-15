@@ -48,8 +48,27 @@ static void *make_cam2(void *game, void *cam1)
     return cam;
 }
 
+/* World-pass camera matrices captured per pane (0 = left/full, 1 = right) for name tags. */
+f32 mp_view[2][16], mp_proj[2][16];
+u8 mp_have_mtx[2];
+
+static void capture(void *gx, int pane)
+{
+    u8 *dev = PTR(gx, 6452);
+    f32 *v, *pr;
+    int i;
+    if (!dev || !(v = PTR(dev, 10888)) || !(pr = PTR(dev, 10880)))
+        return;
+    for (i = 0; i < 16; i++) {
+        mp_view[pane][i] = v[i];
+        mp_proj[pane][i] = pr[i];
+    }
+    mp_have_mtx[pane] = 1;
+}
+
 void mp_gx_beginpass(void *gx, void *cam, s32 flags, Rect *r)
 {
+    int world = (r == 0 && flags == 7);
     if (s_pane_idx >= 0) {
         if (r == 0 && flags == 7) {
             r = &s_pane[s_pane_idx];
@@ -59,6 +78,8 @@ void mp_gx_beginpass(void *gx, void *cam, s32 flags, Rect *r)
         }
     }
     fn_801650F8(gx, cam, flags, r);
+    if (world)
+        capture(gx, s_pane_idx > 0 ? 1 : 0);
 }
 
 void mp_gx_setviewport(void *gx, Rect *r)
@@ -113,3 +134,5 @@ int mp_split_render(void *game, void *gx, const f32 *eye2, const f32 *at2)
     set_aspect(cam1, aspect1);
     return 1;
 }
+
+void *mp_split_cam2(void) { return s_cam2; }
