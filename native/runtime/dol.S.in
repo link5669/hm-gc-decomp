@@ -1,0 +1,8 @@
+    .section .rodata
+    .global hm_dol
+    .global hm_dol_end
+    .balign 32
+hm_dol:
+    .incbin "@HM_DOL@"
+hm_dol_end:
+    .section .note.GNU-stack,"",@progbits

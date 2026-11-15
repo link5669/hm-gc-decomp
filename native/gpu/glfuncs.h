@@ -1,0 +1,153 @@
+// Minimal OpenGL 3.3 core function loader (pointers resolved via SDL_GL_GetProcAddress).
+#pragma once
+#include <GL/glcorearb.h>
+
+#define HMGL_FUNCS(X)                                                                  \
+  X(PFNGLGETERRORPROC, GetError)                                                       \
+  X(PFNGLGETSTRINGPROC, GetString)                                                     \
+  X(PFNGLGETINTEGERVPROC, GetIntegerv)                                                 \
+  X(PFNGLENABLEPROC, Enable)                                                           \
+  X(PFNGLDISABLEPROC, Disable)                                                         \
+  X(PFNGLVIEWPORTPROC, Viewport)                                                       \
+  X(PFNGLSCISSORPROC, Scissor)                                                         \
+  X(PFNGLCLEARCOLORPROC, ClearColor)                                                   \
+  X(PFNGLCLEARDEPTHPROC, ClearDepth)                                                   \
+  X(PFNGLCLEARPROC, Clear)                                                             \
+  X(PFNGLCOLORMASKPROC, ColorMask)                                                     \
+  X(PFNGLDEPTHMASKPROC, DepthMask)                                                     \
+  X(PFNGLDEPTHFUNCPROC, DepthFunc)                                                     \
+  X(PFNGLCULLFACEPROC, CullFace)                                                       \
+  X(PFNGLFRONTFACEPROC, FrontFace)                                                     \
+  X(PFNGLBLENDFUNCSEPARATEPROC, BlendFuncSeparate)                                     \
+  X(PFNGLBLENDEQUATIONSEPARATEPROC, BlendEquationSeparate)                             \
+  X(PFNGLLOGICOPPROC, LogicOp)                                                         \
+  X(PFNGLLINEWIDTHPROC, LineWidth)                                                     \
+  X(PFNGLPIXELSTOREIPROC, PixelStorei)                                                 \
+  X(PFNGLREADPIXELSPROC, ReadPixels)                                                   \
+  X(PFNGLGENTEXTURESPROC, GenTextures)                                                 \
+  X(PFNGLDELETETEXTURESPROC, DeleteTextures)                                           \
+  X(PFNGLBINDTEXTUREPROC, BindTexture)                                                 \
+  X(PFNGLACTIVETEXTUREPROC, ActiveTexture)                                             \
+  X(PFNGLTEXIMAGE2DPROC, TexImage2D)                                                   \
+  X(PFNGLTEXSUBIMAGE2DPROC, TexSubImage2D)                                             \
+  X(PFNGLTEXPARAMETERIPROC, TexParameteri)                                             \
+  X(PFNGLGENSAMPLERSPROC, GenSamplers)                                                 \
+  X(PFNGLBINDSAMPLERPROC, BindSampler)                                                 \
+  X(PFNGLSAMPLERPARAMETERIPROC, SamplerParameteri)                                     \
+  X(PFNGLSAMPLERPARAMETERFPROC, SamplerParameterf)                                     \
+  X(PFNGLGENFRAMEBUFFERSPROC, GenFramebuffers)                                         \
+  X(PFNGLDELETEFRAMEBUFFERSPROC, DeleteFramebuffers)                                   \
+  X(PFNGLBINDFRAMEBUFFERPROC, BindFramebuffer)                                         \
+  X(PFNGLFRAMEBUFFERTEXTURE2DPROC, FramebufferTexture2D)                               \
+  X(PFNGLCHECKFRAMEBUFFERSTATUSPROC, CheckFramebufferStatus)                           \
+  X(PFNGLBLITFRAMEBUFFERPROC, BlitFramebuffer)                                         \
+  X(PFNGLDRAWBUFFERSPROC, DrawBuffers)                                                 \
+  X(PFNGLGENBUFFERSPROC, GenBuffers)                                                   \
+  X(PFNGLBINDBUFFERPROC, BindBuffer)                                                   \
+  X(PFNGLBUFFERDATAPROC, BufferData)                                                   \
+  X(PFNGLGENVERTEXARRAYSPROC, GenVertexArrays)                                         \
+  X(PFNGLBINDVERTEXARRAYPROC, BindVertexArray)                                         \
+  X(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray)                         \
+  X(PFNGLVERTEXATTRIBPOINTERPROC, VertexAttribPointer)                                 \
+  X(PFNGLVERTEXATTRIBIPOINTERPROC, VertexAttribIPointer)                               \
+  X(PFNGLDRAWARRAYSPROC, DrawArrays)                                                   \
+  X(PFNGLDRAWELEMENTSPROC, DrawElements)                                               \
+  X(PFNGLCREATESHADERPROC, CreateShader)                                               \
+  X(PFNGLDELETESHADERPROC, DeleteShader)                                               \
+  X(PFNGLSHADERSOURCEPROC, ShaderSource)                                               \
+  X(PFNGLCOMPILESHADERPROC, CompileShader)                                             \
+  X(PFNGLGETSHADERIVPROC, GetShaderiv)                                                 \
+  X(PFNGLGETSHADERINFOLOGPROC, GetShaderInfoLog)                                       \
+  X(PFNGLCREATEPROGRAMPROC, CreateProgram)                                             \
+  X(PFNGLATTACHSHADERPROC, AttachShader)                                               \
+  X(PFNGLLINKPROGRAMPROC, LinkProgram)                                                 \
+  X(PFNGLGETPROGRAMIVPROC, GetProgramiv)                                               \
+  X(PFNGLGETPROGRAMINFOLOGPROC, GetProgramInfoLog)                                     \
+  X(PFNGLUSEPROGRAMPROC, UseProgram)                                                   \
+  X(PFNGLBINDATTRIBLOCATIONPROC, BindAttribLocation)                                   \
+  X(PFNGLBINDFRAGDATALOCATIONINDEXEDPROC, BindFragDataLocationIndexed)                 \
+  X(PFNGLGETUNIFORMLOCATIONPROC, GetUniformLocation)                                   \
+  X(PFNGLUNIFORM1IPROC, Uniform1i)                                                     \
+  X(PFNGLUNIFORM1FPROC, Uniform1f)                                                     \
+  X(PFNGLUNIFORM4FVPROC, Uniform4fv)                                                   \
+  X(PFNGLUNIFORM2IVPROC, Uniform2iv)                                                   \
+  X(PFNGLUNIFORM4IVPROC, Uniform4iv)                                                   \
+  X(PFNGLUNIFORMMATRIX4FVPROC, UniformMatrix4fv)
+
+#define HMGL_DECL(type, name) extern type hgl_##name;
+HMGL_FUNCS(HMGL_DECL)
+#undef HMGL_DECL
+
+#define glGetError hgl_GetError
+#define glGetString hgl_GetString
+#define glGetIntegerv hgl_GetIntegerv
+#define glEnable hgl_Enable
+#define glDisable hgl_Disable
+#define glViewport hgl_Viewport
+#define glScissor hgl_Scissor
+#define glClearColor hgl_ClearColor
+#define glClearDepth hgl_ClearDepth
+#define glClear hgl_Clear
+#define glColorMask hgl_ColorMask
+#define glDepthMask hgl_DepthMask
+#define glDepthFunc hgl_DepthFunc
+#define glCullFace hgl_CullFace
+#define glFrontFace hgl_FrontFace
+#define glBlendFuncSeparate hgl_BlendFuncSeparate
+#define glBlendEquationSeparate hgl_BlendEquationSeparate
+#define glLogicOp hgl_LogicOp
+#define glLineWidth hgl_LineWidth
+#define glPixelStorei hgl_PixelStorei
+#define glReadPixels hgl_ReadPixels
+#define glGenTextures hgl_GenTextures
+#define glDeleteTextures hgl_DeleteTextures
+#define glBindTexture hgl_BindTexture
+#define glActiveTexture hgl_ActiveTexture
+#define glTexImage2D hgl_TexImage2D
+#define glTexSubImage2D hgl_TexSubImage2D
+#define glTexParameteri hgl_TexParameteri
+#define glGenSamplers hgl_GenSamplers
+#define glBindSampler hgl_BindSampler
+#define glSamplerParameteri hgl_SamplerParameteri
+#define glSamplerParameterf hgl_SamplerParameterf
+#define glGenFramebuffers hgl_GenFramebuffers
+#define glDeleteFramebuffers hgl_DeleteFramebuffers
+#define glBindFramebuffer hgl_BindFramebuffer
+#define glFramebufferTexture2D hgl_FramebufferTexture2D
+#define glCheckFramebufferStatus hgl_CheckFramebufferStatus
+#define glBlitFramebuffer hgl_BlitFramebuffer
+#define glDrawBuffers hgl_DrawBuffers
+#define glGenBuffers hgl_GenBuffers
+#define glBindBuffer hgl_BindBuffer
+#define glBufferData hgl_BufferData
+#define glGenVertexArrays hgl_GenVertexArrays
+#define glBindVertexArray hgl_BindVertexArray
+#define glEnableVertexAttribArray hgl_EnableVertexAttribArray
+#define glVertexAttribPointer hgl_VertexAttribPointer
+#define glVertexAttribIPointer hgl_VertexAttribIPointer
+#define glDrawArrays hgl_DrawArrays
+#define glDrawElements hgl_DrawElements
+#define glCreateShader hgl_CreateShader
+#define glDeleteShader hgl_DeleteShader
+#define glShaderSource hgl_ShaderSource
+#define glCompileShader hgl_CompileShader
+#define glGetShaderiv hgl_GetShaderiv
+#define glGetShaderInfoLog hgl_GetShaderInfoLog
+#define glCreateProgram hgl_CreateProgram
+#define glAttachShader hgl_AttachShader
+#define glLinkProgram hgl_LinkProgram
+#define glGetProgramiv hgl_GetProgramiv
+#define glGetProgramInfoLog hgl_GetProgramInfoLog
+#define glUseProgram hgl_UseProgram
+#define glBindAttribLocation hgl_BindAttribLocation
+#define glBindFragDataLocationIndexed hgl_BindFragDataLocationIndexed
+#define glGetUniformLocation hgl_GetUniformLocation
+#define glUniform1i hgl_Uniform1i
+#define glUniform1f hgl_Uniform1f
+#define glUniform4fv hgl_Uniform4fv
+#define glUniform2iv hgl_Uniform2iv
+#define glUniform4iv hgl_Uniform4iv
+#define glUniformMatrix4fv hgl_UniformMatrix4fv
+
+// Returns false if any function is missing.
+bool hmgl_load(void *(*getproc)(const char *));

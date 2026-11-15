@@ -1,0 +1,12 @@
+# kind  symbol            host function
+savectx fn_800B4F78                     # OSSaveContext: call sites become setjmp
+replace OSLoadContext     hle_OSLoadContext
+replace OSReport          hle_OSReport
+replace fn_800B5520        hle_OSPanic       # OSPanic
+replace fn_800C3740        hle_PADRead       # PADRead
+replace fn_800C3528        hle_PADInit       # PADInit
+replace fn_800C3324        hle_PADReset      # PADReset
+replace fn_800C3424        hle_PADRecalibrate # PADRecalibrate
+replace fn_800C3AEC        hle_PADControlMotor # PADControlMotor
+replace fn_80273E10        hle_nop           # VMInit (ARAM virtual memory): native memory is flat
+replace fn_802743F8        hle_return1       # VMAlloc: 0x7E000000.. is backed by a host buffer (cpu.cpp)
