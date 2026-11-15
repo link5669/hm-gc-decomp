@@ -94,5 +94,5 @@ void mp_draw_p2_hud(void)
     buf[0] = 'x'; buf[1] = (char)('0' + (n > 9 ? 9 : n < 0 ? 0 : n)); buf[2] = 0;
     mp_draw_text(x + 128.0f, y - 2.0f, buf, 1.0f, 0xFFFFFFFF);
     if (n <= 0 && hp <= 0.0f)
-        mp_draw_text_centered(x + 60.0f, y + 16.0f, "OUT OF LIVES", 1.0f, 0xE04040FF);
+        mp_draw_text_centered(x + 60.0f, y + 16.0f, "OUT OF LIVES - START TO REJOIN", 1.0f, 0xE04040FF);
 }

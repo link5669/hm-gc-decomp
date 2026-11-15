@@ -27,8 +27,12 @@ extern void *lbl_8035B320, *lbl_8035B460, *lbl_8035B65C;
 #define INPUT_STRUCT() ((u8 *)*(void **)0x8035B65C + 0x770)
 static u8 s_p2_input[0x54];
 static int s_p2_statics_init;
+static int s_place_p2;  /* put player 2 next to player 1 before its next update */
 static void give_p2_lantern(void *p0, void *p1);
+static void give_p2_camera(void *p0, void *p1);
 static void give_p2_nodes(void *p0, void *p1);
+void mp_teleport_p2_to_p1(void);
+void mp_split_reset(void);
 /* Runtime-cloned world nodes are not in the world's update list (fn_80192488), so their animation
    would never advance: tick them ourselves each frame. */
 void fn_80187EE0(void *node, f32 dt);
@@ -85,6 +89,7 @@ int mp_spawn_p2(void)
         return 0;
     /* player 2 gets its own copy of the "zeke" world node (model instance + physics body) */
     s_ncloned = 0;
+    mp_split_reset();
     {
         void *d0 = d;
         d = clone_node(d0);
@@ -117,6 +122,7 @@ int mp_spawn_p2(void)
         ((char *)p1 + 0x8c)[i] = name2[i];
     fn_80076E94(p1);
     give_p2_lantern(p0, p1);
+    give_p2_camera(p0, p1);
     OSReport("[mp] spawn: linked, +434 %p +424 %p\n", PTR(p1, 0x434), PTR(p1, 0x424));
     {
         s32 *v540 = PTR(p0, 0x540), *v544 = PTR(p0, 0x544), *v548 = PTR(p0, 0x548);
@@ -142,7 +148,8 @@ int mp_spawn_p2(void)
     mp_player[1] = p1;
     mp_player_seen[1] = mp_render_frame;
     s_p2_statics_init = 0;
-    /* player 2 starts at the level's spawn point (placed by the link step) */
+    /* player 2 starts next to player 1 (positioned on its first update, see mp_update_p2) */
+    s_place_p2 = 1;
     for (i = 0; i < 0x54; i++)
         s_p2_input[i] = INPUT_STRUCT()[i];
     {
@@ -248,7 +255,7 @@ static void *clone_actor(void *x0, const char *name8)
     for (i = 0; i < 8; i++)
         ((char *)x2 + 0x8c)[i] = name8[i];
     ((void (*)(void *))VT(x2, 0x34))(x2);
-    ((void (*)(void *))VT(x2, 0x14))(x2);
+    /* (no stop() here: for a Camera it unbinds the actor completely) */
     ((void (*)(void *))VT(x2, 0x10))(x2);
     PTR(mgr, 0x48) = saved48;
     PTR(mgr, 0x4c) = saved4c;
@@ -268,6 +275,24 @@ static void repoint(void *obj, u32 size, void *from, void *to)
 }
 
 static void *s_lantern2;
+void *mp_gamecam2;  /* player 2's own follow camera actor (clone of "GameCam") */
+void fn_80223A50(void *cam, f32 dt);  /* Camera actor update */
+
+static void give_p2_camera(void *p0, void *p1)
+{
+    void *c0 = PTR(p0, 0x258), *c2;
+    static const char nm[8] = "gamcam2";
+    mp_gamecam2 = 0;
+    if (!c0)
+        return;
+    c2 = clone_actor(c0, nm);
+    if (!c2)
+        return;
+    repoint(c2, 0x330, p0, p1);
+    PTR(c2, 0x18c) = p1;
+    PTR(p1, 0x258) = c2;
+    mp_gamecam2 = c2;
+}
 
 /* Player 2's own lantern: separate beam, separate ghost catching (shared totals live in global vars). */
 static void give_p2_lantern(void *p0, void *p1)
@@ -328,6 +353,21 @@ void mp_anim_request(void *o, void *anim, f32 a, s32 u, s32 b, s32 c, s32 q, f32
     fn_8022CC44(o, anim, a, u, b, c, q, d);
 }
 
+/* Move player 2 next to player 1 (spawn, respawn, debug). */
+void mp_teleport_p2_to_p1(void)
+{
+    f32 pos[3];
+    extern int mp_player_pos(void *player, f32 *pos);
+    u8 *p2 = mp_player[1];
+    if (!p2 || !mp_player_pos(mp_player[0], pos))
+        return;
+    pos[0] += 1.0f;
+    pos[1] += 0.5f;
+    *(f32 *)(p2 + 0x44) = pos[0];
+    *(f32 *)(p2 + 0x48) = pos[1];
+    *(f32 *)(p2 + 0x4c) = pos[2];
+}
+
 /* Called right after player 1's update each frame. */
 void mp_update_p2(f32 dt)
 {
@@ -343,14 +383,26 @@ void mp_update_p2(f32 dt)
             mp_p2_lives--;
             fn_8006B6C8(mp_player[1]);
             mp_p2_respawns++;
+            s_place_p2 = 1;
+        } else if (mp.p2_rejoin) {
+            /* out of lives: player 2 pressed START to come back in with fresh lives */
+            mp.p2_rejoin = 0;
+            mp_p2_lives = 3;
+            fn_8006B6C8(mp_player[1]);
+            s_place_p2 = 1;
         } else {
             mp_player_seen[1] = mp_render_frame;
             return;
         }
     }
+    if (s_place_p2) {
+        s_place_p2 = 0;
+        mp_teleport_p2_to_p1();
+    }
     statics_save(&s_p1_statics);
     if (!s_p2_statics_init) {
         s_p2_statics = s_p1_statics;
+        repoint(s_p2_statics.a, ST_A_SIZE, mp_player[0], mp_player[1]);
         s_p2_statics_init = 1;
     }
     statics_load(&s_p2_statics);
@@ -403,6 +455,23 @@ void mp_update_p2(f32 dt)
                      (int)(*(f32 *)(P + 0x504) * 100), beh ? U32(beh, 0xdc) : -1);
         }
     }
+    if (mp.debug_kill) {
+        mp.debug_kill = 0;
+        *(f32 *)((u8 *)mp_player[1] + 0x1ac) = 0.0f;
+        OSReport("[mp] debug: player 2 knocked out (lives %d)\n", mp_p2_lives);
+    }
+    if (mp.debug_teleport) {
+        f32 a[3], b[3];
+        extern int mp_player_pos(void *player, f32 *pos);
+        mp.debug_teleport = 0;
+        mp_player_pos(mp_player[0], a);
+        mp_player_pos(mp_player[1], b);
+        OSReport("[mp] debug: p1 %d %d %d p2 %d %d %d | P2+44 %d %d %d +458 %p P1+458 %p\n", (int)(a[0] * 10), (int)(a[1] * 10),
+                 (int)(a[2] * 10), (int)(b[0] * 10), (int)(b[1] * 10), (int)(b[2] * 10),
+                 (int)(*(f32 *)((u8 *)mp_player[1] + 0x44) * 10), (int)(*(f32 *)((u8 *)mp_player[1] + 0x48) * 10),
+                 (int)(*(f32 *)((u8 *)mp_player[1] + 0x4c) * 10), PTR(mp_player[1], 0x458), PTR(mp_player[0], 0x458));
+        mp_teleport_p2_to_p1();
+    }
     if (mp.debug_hide) {
         void *hn = mp.debug_hide == 1 ? PTR(mp_player[1], 0xa0) : PTR(mp_player[1], 0x424);
         if (hn) {
@@ -432,7 +501,13 @@ void mp_fill_p2_input(const PADStatus *st)
     BT(0x38) = (b & PAD_BUTTON_B) != 0;
     BT(0x3c) = (b & PAD_BUTTON_Y) != 0;
     BT(0x40) = (b & PAD_TRIGGER_L) != 0;
-    BT(0x2c) = (b & PAD_BUTTON_A) != 0;
+    {
+        /* A is a one-shot for the game (it clears the flag once used): set it on the press only */
+        static u16 prev;
+        if ((b & PAD_BUTTON_A) && !(prev & PAD_BUTTON_A))
+            BT(0x2c) = 1;
+        prev = b;
+    }
 #undef AX
 #undef BT
 }

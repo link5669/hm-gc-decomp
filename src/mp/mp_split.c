@@ -209,9 +209,70 @@ int mp_coop_render(void *game, void *gx)
         eye[i] = -(v[0 + i] * v[3] + v[4 + i] * v[7] + v[8 + i] * v[11]);
         fwd[i] = -v[8 + i];
     }
+#ifdef MP_DEBUG_AUTOJOIN
+    {
+        /* find where the GameCam actor keeps its eye position */
+        static int done;
+        u8 *o76 = *(u8 **)((u8 *)*(void **)0x8035B308 + 0x4c);
+        u32 k;
+        if (!done && o76 && (mp_render_frame % 60) == 0) {
+            done = 1;
+            OSReport("[mp] cam1 eye %d %d %d; GameCam %p matches:", (int)(eye[0] * 100), (int)(eye[1] * 100), (int)(eye[2] * 100), o76);
+            for (k = 0; k + 12 <= 0x330; k += 4) {
+                f32 *f = (f32 *)(o76 + k), d0 = f[0] - eye[0], d1 = f[1] - eye[1], d2 = f[2] - eye[2];
+                if (d0 * d0 + d1 * d1 + d2 * d2 < 0.05f)
+                    OSReport(" +%03x", k);
+            }
+            OSReport("\n");
+        }
+    }
+#endif
     for (i = 0; i < 3; i++) {
         eye2[i] = p2[i] + (eye[i] - p1[i]);
         at2[i] = eye2[i] + fwd[i] * 5.0f;
     }
+    {
+        /* player 2's own follow camera actor (with the game's collision/smoothing), if it has a position */
+        extern void *mp_gamecam2;
+        f32 c[3];
+        if (mp_gamecam2) {
+            f32 dx, dy, dz, d2c;
+            c[0] = *(f32 *)((u8 *)mp_gamecam2 + 0x44);  /* camera actors keep their eye position at +0x44 */
+            c[1] = *(f32 *)((u8 *)mp_gamecam2 + 0x48);
+            c[2] = *(f32 *)((u8 *)mp_gamecam2 + 0x4c);
+            dx = c[0] - p2[0]; dy = c[1] - p2[1]; dz = c[2] - p2[2];
+            d2c = dx * dx + dy * dy + dz * dz;
+#ifdef MP_DEBUG_AUTOJOIN
+            {
+                static int dumped;
+                u8 *o76 = *(u8 **)((u8 *)*(void **)0x8035B308 + 0x4c), *c2 = mp_gamecam2;
+                u32 k;
+                if (!dumped && (mp_render_frame % 60) == 0) {
+                    dumped = 1;
+                    for (k = 0; k < 0x330; k += 4)
+                        if (*(u32 *)(o76 + k) != *(u32 *)(c2 + k))
+                            OSReport("[mp] CAM +%03x %08x %08x\n", k, *(u32 *)(o76 + k), *(u32 *)(c2 + k));
+                }
+            }
+#endif
+            if ((mp_render_frame % 120) == 0)
+                OSReport("[mp] gamecam2 at %d %d %d, p2 %d %d %d, eye2 %d %d %d\n", (int)(c[0] * 10), (int)(c[1] * 10),
+                         (int)(c[2] * 10), (int)(p2[0] * 10), (int)(p2[1] * 10), (int)(p2[2] * 10), (int)(eye2[0] * 10),
+                         (int)(eye2[1] * 10), (int)(eye2[2] * 10));
+            if (d2c > 0.25f && d2c < 400.0f) {
+                for (i = 0; i < 3; i++)
+                    eye2[i] = c[i];
+                at2[0] = p2[0]; at2[1] = p2[1]; at2[2] = p2[2] + 1.2f;
+            }
+        }
+    }
     return mp_split_render(game, gx, eye2, at2);
+}
+
+/* A new level frees the old camera objects: make camera 2 again on the next split. */
+void mp_split_reset(void)
+{
+    s_cam2 = 0;
+    s_split_on = 0;
+    mp_have_mtx[0] = mp_have_mtx[1] = 0;
 }

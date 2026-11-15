@@ -74,6 +74,26 @@ void mp_player_update(void *player, f32 dt)
         s_p0_frames = 0;
     }
     mp_player_seen[0] = mp_render_frame;
+#ifdef MP_DEBUG_INPUT
+    {
+        /* log every change of player 1's input struct, with the raw pad state */
+        static u32 last[0x15];
+        u32 *in = (u32 *)((u8 *)*(void **)0x8035B65C + 0x770);
+        int k, ch = 0;
+        for (k = 2; k < 0x15; k++)
+            if (in[k] != last[k])
+                ch = 1;
+        if (ch) {
+            OSReport("[mp] IN btn %04x st %d %d c %d %d:", mp.in[0].held, mp.in[0].sx, mp.in[0].sy, 0, 0);
+            for (k = 2; k < 0x15; k++) {
+                if (in[k] != last[k])
+                    OSReport(" +%02x=%08x", k * 4, in[k]);
+                last[k] = in[k];
+            }
+            OSReport("\n");
+        }
+    }
+#endif
     fn_80074AF4(player, dt);
     /* player 2 appears once player 1 has been in control for a moment (after loads/intros) */
     if (mp.mode == MP_COOP && !mp_player[1]) {

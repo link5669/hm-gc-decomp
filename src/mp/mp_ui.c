@@ -148,13 +148,17 @@ void mp_ui_update(void)
             type_key(KEY_DONE);
         break;
     case MP_COOP:
+        if (mp.in[1].pressed & PAD_BUTTON_START)
+            mp.p2_rejoin = 1;
         if (!mp.in[1].connected)
             mp.mode = MP_SOLO;  /* player 2 left (controller unplugged) */
 #ifdef MP_DEBUG_AUTOJOIN
         if (mp.in[1].pressed & PAD_TRIGGER_Z)
             mp.debug_split ^= 1;  /* debug: force split screen */
-        if (mp.in[1].pressed & PAD_BUTTON_X)
-            mp.debug_hide = (mp.debug_hide + 1) % 3;
+        if (mp.in[1].pressed & PAD_BUTTON_UP)
+            mp.debug_teleport = 1;
+        if (mp.in[1].pressed & PAD_BUTTON_DOWN)
+            mp.debug_kill = 1;
 #endif
         break;
     }
