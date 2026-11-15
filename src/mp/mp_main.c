@@ -67,6 +67,7 @@ static void mp_dump_players(void *p0)
 }
 static void *s_updated[8];
 int mp_spawn_p2(void);
+static int s_p0_frames;
 void mp_update_p2(f32 dt);
 void *fn_800F9398(void *table, const char *name);
 static int s_nupdated;
@@ -97,14 +98,20 @@ void mp_player_update(void *player, f32 dt)
     if (player != mp_player[0]) {
         mp_player[0] = player;     /* new level: the old player 2 died with the old pool */
         mp_player[1] = 0;
+        s_p0_frames = 0;
     }
     mp_player_seen[0] = mp_render_frame;
     fn_80074AF4(player, dt);
-    if (mp.want_spawn) {
-        mp.want_spawn = 0;
-        OSReport("[mp] spawn request: mode %d p1 %p\n", mp.mode, mp_player[1]);
-        if (mp.mode == MP_COOP && !mp_player[1])
+    /* player 2 appears once player 1 has been in control for a moment (after loads/intros) */
+    if (mp.mode == MP_COOP && !mp_player[1]) {
+        extern u32 mp_hud_seen;
+        if (mp_render_frame - mp_hud_seen > 3)
+            s_p0_frames = 0;
+        else if (++s_p0_frames > 90)
             mp_spawn_p2();
+    } else {
+        s_p0_frames = 0;
     }
-    mp_update_p2(dt);
+    if (mp.mode == MP_COOP)
+        mp_update_p2(dt);
 }

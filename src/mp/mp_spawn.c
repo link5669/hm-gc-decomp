@@ -15,6 +15,8 @@ void fn_80188144(void *dst, void *world, void *src, int flags);  /* world node c
 void fn_8019B7E8(void *scene, void *node);                       /* add node to the scene draw list */
 void fn_800F7EC0(void *heap);
 void fn_800F7E98(void);
+void fn_80190C98(void *node);
+extern u8 lbl_803286D0[];
 extern void *lbl_8035B320, *lbl_8035B460, *lbl_8035B65C;
 
 #define PTR(p, o) (*(void **)((u8 *)(p) + (o)))
@@ -77,6 +79,7 @@ int mp_spawn_p2(void)
     PTR(PTR(p0, 0x9c), 0x3c) = saved_owner;
     mp_player[1] = p1;
     mp_player_seen[1] = mp_render_frame;
+    /* player 2 starts at the level's spawn point (placed by the link step) */
     for (i = 0; i < 0x54; i++)
         s_p2_input[i] = INPUT_STRUCT()[i];
     OSReport("[mp] spawn: player 2 is %p\n", p1);

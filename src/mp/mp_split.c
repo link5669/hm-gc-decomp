@@ -91,7 +91,13 @@ void mp_gx_setviewport(void *gx, Rect *r)
 }
 
 /* HUD, menus and fades are drawn once (full screen) in the last pass only. */
-void mp_hook_hud(void *a, void *gx) { if (s_pane_idx != 0) fn_8002C34C(a, gx); }
+u32 mp_hud_seen;  /* render frame in which the in-game HUD was last drawn (= real gameplay) */
+void mp_hook_hud(void *a, void *gx)
+{
+    mp_hud_seen = mp_render_frame;
+    if (s_pane_idx != 0)
+        fn_8002C34C(a, gx);
+}
 void mp_hook_menu(void *a, void *gx) { if (s_pane_idx != 0) fn_801C3050(a, gx); }
 void mp_hook_fade(void *a, void *gx) { if (s_pane_idx != 0) fn_80039F78(a, gx); }
 
