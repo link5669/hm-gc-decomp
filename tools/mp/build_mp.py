@@ -16,7 +16,7 @@ TC = os.path.expanduser("~/.local/share/decompnet/toolchains")
 BU = f"{TC}/gc-wii-binutils/powerpc-eabi-"
 MWCC = [f"{TC}/wibo/wibo", f"{TC}/mwcc/GC/2.6/mwcceppc.exe"]
 CFLAGS = ("-nodefaults -proc gekko -align powerpc -enum int -fp hardware -Cpp_exceptions off "
-          "-O4,p -inline auto -nosyspath -RTTI off -str reuse -sdata 0 -sdata2 0 -lang=c -maxerrors 3 "
+          "-O4,p -inline auto -use_lmw_stmw on -nosyspath -RTTI off -str reuse -sdata 0 -sdata2 0 -lang=c -maxerrors 3 "
           "-i src/mp -i tools/rea/ref/dolsdk2004/include -i tools/rea/ref/dolsdk2004/include/libc").split()
 BLD = os.path.join(ROOT, "build/GHYE6S")
 OUT = os.path.join(BLD, "mp")
@@ -108,13 +108,17 @@ def main():
             continue
         site, kind, sym = line.split()[:3]
         site = gsyms[site] if site in gsyms else int(site, 16)
-        if "+" in line.split()[0]:
-            pass
         tgt = msyms.get(sym, gsyms.get(sym))
         if tgt is None:
             sys.exit(f"hook target {sym} not found")
         o = va2off(dol, site)
         old = struct.unpack(">I", dol[o:o + 4])[0]
+        if kind == "word":  # data pointer (e.g. a vtable slot): replace with the mod symbol's address
+            if len(line.split()) > 3 and int(line.split()[3], 16) != old:
+                sys.exit(f"word at {site:#x} is {old:08x}, expected {line.split()[3]}")
+            dol[o:o + 4] = struct.pack(">I", tgt)
+            n += 1
+            continue
         if kind == "bl" and (old & 0xFC000003) != 0x48000001:
             sys.exit(f"hook site {site:#x} is not a bl ({old:08x})")
         rel = tgt - site

@@ -1,2 +1,3 @@
 # site(addr or symbol)  kind(bl|b)  target-symbol      -- one instruction rewritten per line
 800605d4 bl mp_hook_main_init   # main: first call (app init) -> run mod init first
+802afa90 word mp_game_render 800326D0   # Game vtable: Render(self, gx) -> wrapper that draws the mod overlay after it
