@@ -514,6 +514,10 @@ void mp_update_p2(f32 dt)
         s_p2_statics_init = 1;
     }
     statics_load(&s_p2_statics);
+    if (mp.p2_ai) {
+        extern void mp_ai_fill(u8 *in);
+        mp_ai_fill(s_p2_input);
+    }
     if (s_lantern2) {
         void *bp = PTR(mp_player[1], 0x20c);  /* BPlayer re-looks up "lantern" when it starts */
         PTR(mp_player[1], 0x434) = s_lantern2;
@@ -626,6 +630,8 @@ void mp_fill_p2_input(const PADStatus *st)
 {
     u8 *s = s_p2_input;
     u16 b = st->button;
+    if (mp.p2_ai)
+        return;  /* player 2 is computer-controlled */
 #define AX(o) (*(f32 *)(s + (o)))
 #define BT(o) (*(u32 *)(s + (o)))
     AX(0x08) = st->stickY / 127.0f;   /* forward */
@@ -683,7 +689,9 @@ void mp_load_level(void *fw, void *name8)
     mp_player[1] = 0;  /* everything of player 2 is freed with the level */
     {
         extern void mp_enemies_reset(void);
+        extern void mp_ai_reset(void);
         mp_enemies_reset();  /* all actors are freed too */
+        mp_ai_reset();
     }
     mp_split_reset();
     fn_800323C4(fw, name8);

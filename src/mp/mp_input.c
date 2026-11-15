@@ -48,10 +48,11 @@ u32 mp_pad_read(PADStatus *st)
         }
     }
     /* The game must not see menu input while a player types a name, and port 2 never drives Zeke 1. */
-    if ((was_naming || mp.mode == MP_NAMING) && st[0].err == PAD_ERR_NONE)
+    if ((was_naming || mp.mode == MP_NAMING || mp.menu_open) && st[0].err == PAD_ERR_NONE)
         blank(&st[0]);
     if (st[1].err == PAD_ERR_NONE) {
-        mp_fill_p2_input(&st[1]);
+        if (!mp.menu_open)
+            mp_fill_p2_input(&st[1]);
         blank(&st[1]);
     }
     return r;

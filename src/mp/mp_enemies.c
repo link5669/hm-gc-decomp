@@ -301,3 +301,5 @@ done:
     addi r1, r1, 64
     blr
 }
+
+int mp_is_enemy_actor(u8 *o) { return is_enemy(o); }

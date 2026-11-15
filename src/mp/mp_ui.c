@@ -98,10 +98,16 @@ static void type_key(int k)
     }
 }
 
+void mp_menu_update(void);
+void mp_menu_draw(void);
+
 void mp_ui_update(void)
 {
     MpInput *in;
     int dx, dy;
+    mp_menu_update();
+    if (mp.menu_open)
+        return;
 
     switch (mp.mode) {
     case MP_SOLO:
@@ -217,6 +223,9 @@ static void draw_keyboard(void)
 
 void mp_ui_draw(void)
 {
+    mp_menu_draw();
+    if (mp.menu_open)
+        return;
     switch (mp.mode) {
     case MP_SOLO:
         if (mp.join_pending)

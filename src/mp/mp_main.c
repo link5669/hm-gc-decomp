@@ -117,7 +117,7 @@ void mp_actor_update_coop(void *mgr, f32 dt);
 /* Hook: per-frame actor update (players, enemies, objects). Paused while a player types a name. */
 void mp_actor_update(void *mgr, f32 dt)
 {
-    if (mp.mode == MP_NAMING)
+    if (mp.mode == MP_NAMING || mp.menu_open)
         return;
     mp_actor_update_coop(mgr, dt);
 }
@@ -141,4 +141,14 @@ int mp_in_gameplay(void)
         since = mp_render_frame;
     last_frame = mp_render_frame;
     return ok && mp_render_frame - since >= 120;
+}
+
+/* Same signals without the 2-second stability requirement (for the debug menu). */
+int mp_in_gameplay_now(void)
+{
+    extern int mp_in_title;
+    u8 *lm = *(u8 **)0x8035B684;
+    int hud = mp_render_frame - mp_hud_seen <= 3;
+    int p0 = mp_player[0] && mp_render_frame - mp_player_seen[0] <= 3;
+    return hud && p0 && lm && lm[0x1b8] != 0 && !mp_in_title;
 }
