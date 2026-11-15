@@ -1,0 +1,31 @@
+#ifndef MP_STATE_H
+#define MP_STATE_H
+#include <dolphin/types.h>
+#include <dolphin/pad.h>
+
+#define MP_NAME_MAX 10
+
+enum { MP_SOLO, MP_NAMING, MP_COOP };
+
+typedef struct MpInput {
+    u16 held, pressed;  /* PAD_BUTTON_* bits */
+    s8 sx, sy;          /* main stick */
+    u8 connected;
+    u8 rep_timer;       /* menu auto-repeat */
+    s8 rep_dx, rep_dy;
+} MpInput;
+
+typedef struct MpState {
+    int mode;           /* MP_SOLO / MP_NAMING / MP_COOP */
+    int naming_player;  /* 0 or 1 while MP_NAMING */
+    char name[2][MP_NAME_MAX + 1];
+    u8 named[2];
+    MpInput in[2];
+    u32 frame;
+} MpState;
+
+extern MpState mp;
+
+void mp_ui_update(void);
+void mp_ui_draw(void);
+#endif
