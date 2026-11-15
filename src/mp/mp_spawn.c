@@ -27,6 +27,14 @@ extern void *lbl_8035B320, *lbl_8035B460, *lbl_8035B65C;
 #define INPUT_STRUCT() ((u8 *)*(void **)0x8035B65C + 0x770)
 static u8 s_p2_input[0x54];
 static int s_p2_statics_init;
+typedef struct Statics Statics;
+static void statics_save(Statics *t);
+static void statics_load(const Statics *t);
+static void spawn_statics_begin(void);
+static void spawn_statics_end(void *p0, void *p1);
+static void spawn_statics_abort(void);
+static void apply_carry(void *p1);
+static void repoint(void *obj, u32 size, void *from, void *to);
 static int s_place_p2;  /* put player 2 next to player 1 before its next update */
 static void give_p2_lantern(void *p0, void *p1);
 static void give_p2_camera(void *p0, void *p1);
@@ -82,11 +90,12 @@ int mp_spawn_p2(void)
 
     if (!p0 || !mgr || mp_player[1])
         return 0;
+    spawn_statics_begin();  /* Start() of player 2 writes player-1 globals (camera target...): undo afterwards */
     q = PTR(p0, 0x0c);
     c = PTR(p0, 0x10);
     d = PTR(p0, 0x9c);
     if (!q || !c || !d)
-        return 0;
+        { spawn_statics_abort(); return 0; }
     /* player 2 gets its own copy of the "zeke" world node (model instance + physics body) */
     s_ncloned = 0;
     mp_split_reset();
@@ -94,7 +103,7 @@ int mp_spawn_p2(void)
         void *d0 = d;
         d = clone_node(d0);
         if (!d)
-            return 0;
+            { spawn_statics_abort(); return 0; }
         clone_kids(d0, d);
         {
             u8 *m1 = PTR(d0, 0xa8), *m2 = PTR(d, 0xa8);
@@ -113,7 +122,7 @@ int mp_spawn_p2(void)
     p1 = fn_8023CA4C(mgr, (void *)cls);
     OSReport("[mp] spawn: p0 %p -> pool gave %p (owner %p)\n", p0, p1, saved_owner);
     if (!p1 || p1 == p0)
-        return 0;
+        { spawn_statics_abort(); return 0; }
     fn_80076FF0(p1, q, mgr, d, c);
     U32(mgr, 0x54)++;
     PTR(mgr, 0x48) = saved48;
@@ -122,7 +131,7 @@ int mp_spawn_p2(void)
         ((char *)p1 + 0x8c)[i] = name2[i];
     fn_80076E94(p1);
     give_p2_lantern(p0, p1);
-    give_p2_camera(p0, p1);
+    /* (no GameCam clone for player 2: cloning a Camera actor takes over player 1's camera) */
     OSReport("[mp] spawn: linked, +434 %p +424 %p\n", PTR(p1, 0x434), PTR(p1, 0x424));
     {
         s32 *v540 = PTR(p0, 0x540), *v544 = PTR(p0, 0x544), *v548 = PTR(p0, 0x548);
@@ -147,7 +156,8 @@ int mp_spawn_p2(void)
     PTR(PTR(p0, 0x9c), 0x3c) = saved_owner;
     mp_player[1] = p1;
     mp_player_seen[1] = mp_render_frame;
-    s_p2_statics_init = 0;
+    spawn_statics_end(p0, p1);
+    apply_carry(p1);
     /* player 2 starts next to player 1 (positioned on its first update, see mp_update_p2) */
     s_place_p2 = 1;
     for (i = 0; i < 0x54; i++)
@@ -180,7 +190,7 @@ int mp_spawn_p2(void)
    aim/look modes, camera push flags... Player 2 gets its own copy, swapped in only around its update. */
 #define ST_A_BEGIN 0x8035A238
 #define ST_A_SIZE (0x8035A2B0 - 0x8035A238)
-typedef struct Statics { u8 a[ST_A_SIZE]; u32 b6e8, b6ec, s9748; } Statics;
+struct Statics { u8 a[ST_A_SIZE]; u32 b6e8, b6ec, s9748; };
 static Statics s_p2_statics, s_p1_statics;
 
 static void statics_save(Statics *t)
@@ -191,6 +201,18 @@ static void statics_save(Statics *t)
     t->b6e8 = *(u32 *)0x8035B6E8;
     t->b6ec = *(u32 *)0x8035B6EC;
     t->s9748 = *(u32 *)0x80359748;
+}
+
+static Statics s_spawn_saved;
+static void spawn_statics_begin(void) { statics_save(&s_spawn_saved); }
+static void spawn_statics_abort(void) { statics_load(&s_spawn_saved); }
+static void spawn_statics_end(void *p0, void *p1)
+{
+    /* player 2 keeps what its Start() set up (pointing at itself), player 1 gets its globals back */
+    statics_save(&s_p2_statics);
+    repoint(s_p2_statics.a, ST_A_SIZE, p0, p1);
+    s_p2_statics_init = 1;
+    statics_load(&s_spawn_saved);
 }
 
 static void statics_load(const Statics *t)
@@ -455,6 +477,11 @@ void mp_update_p2(f32 dt)
                      (int)(*(f32 *)(P + 0x504) * 100), beh ? U32(beh, 0xdc) : -1);
         }
     }
+    if (mp.debug_level) {
+        extern void mp_debug_load_level(const char *name);
+        mp.debug_level = 0;
+        mp_debug_load_level("BALLROOM");
+    }
     if (mp.debug_kill) {
         mp.debug_kill = 0;
         *(f32 *)((u8 *)mp_player[1] + 0x1ac) = 0.0f;
@@ -511,3 +538,58 @@ void mp_fill_p2_input(const PADStatus *st)
 #undef AX
 #undef BT
 }
+
+/* ---- room / level changes ------------------------------------------------------------------------
+   Every level change goes through LoadLevel (fn_800323C4, Game secondary vtable slot 0x3C); the unload
+   happens on the next frame and frees all actors. Player 2 is dropped here and spawned again next to
+   player 1 in the new room, keeping its lives and health. Walk-in zones fire for either player (each has
+   its own world node in the collision pass), so whoever enters a loading zone takes both along. */
+void fn_800323C4(void *fw, void *name8);
+static s32 s_carry_lives = -1;
+static f32 s_carry_hp = -1.0f;
+asm u32 mp_get_lr(void)
+{
+    nofralloc
+    mflr r3
+    blr
+}
+
+void mp_load_level(void *fw, void *name8)
+{
+    if (mp_player[1]) {
+        s_carry_lives = mp_p2_lives;
+        s_carry_hp = *(f32 *)((u8 *)mp_player[1] + 0x1ac);
+    }
+    OSReport("[mp] level change to '%.8s' (player 2 carried: lives %d)\n", (char *)name8, s_carry_lives);
+    mp_player[1] = 0;  /* everything of player 2 is freed with the level */
+    mp_split_reset();
+    fn_800323C4(fw, name8);
+}
+
+/* after a spawn in a new room: restore what player 2 carried over */
+static void apply_carry(void *p1)
+{
+    if (s_carry_lives >= 0) {
+        mp_p2_lives = s_carry_lives;
+        if (s_carry_hp > 0.0f && s_carry_hp < *(f32 *)((u8 *)p1 + 0x1a8))
+            *(f32 *)((u8 *)p1 + 0x1ac) = s_carry_hp;
+        s_carry_lives = -1;
+        s_carry_hp = -1.0f;
+    }
+}
+
+#ifdef MP_DEBUG_AUTOJOIN
+/* debug: trigger a level change the way level exits do */
+void mp_debug_load_level(const char *name)
+{
+    u8 *fw = *(u8 **)0x8035B65C;
+    char key[8];
+    int i;
+    for (i = 0; i < 8; i++)
+        key[i] = 0;
+    for (i = 0; i < 8 && name[i]; i++)
+        key[i] = name[i];
+    if (fw && PTR(fw, 0x2f0))
+        ((void (*)(void *, void *))PTR(PTR(fw, 0x2f0), 0x3c))(fw, key);
+}
+#endif

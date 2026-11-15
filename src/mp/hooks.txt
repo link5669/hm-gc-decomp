@@ -16,3 +16,4 @@
 802414c0 bl mp_anim_request
 8024150c bl mp_anim_request
 80241600 bl mp_anim_request
+802afaac word mp_load_level 800323C4   # Game: LoadLevel (room/level change) -> drop/carry player 2

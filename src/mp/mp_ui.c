@@ -159,6 +159,8 @@ void mp_ui_update(void)
             mp.debug_teleport = 1;
         if (mp.in[1].pressed & PAD_BUTTON_DOWN)
             mp.debug_kill = 1;
+        if (mp.in[1].pressed & PAD_BUTTON_X)
+            mp.debug_level = 1;
 #endif
         break;
     }
