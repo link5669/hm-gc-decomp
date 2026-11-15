@@ -10,14 +10,17 @@ How it works (no game code or data moves):
   section, then rewrites the branch instructions listed in `src/mp/hooks.txt` to call into the mod.
 
 ## Playing co-op
-- Plug in a second controller (port 2) and press START on it, in a menu or in game. If you're in a menu, a note says the
-  join is pending. Once gameplay starts, the game world pauses and each player types a name on an on-screen keyboard
-  with their own controller (stick/D-pad to move, A to type, B to delete, START when done).
-- Player 2 then appears as a second Zeke (own body, lantern and controls) at the level's spawn point. Both players
-  share the souls, health and other progress, so they work towards the same goal.
-- Names are shown above each player's head. When the players are far apart (more than 9 units), the screen splits
-  vertically: player 1 on the left, player 2 on the right. It merges again when they're within 6 units.
-- Unplugging controller 2 ends co-op (player 2 stops moving).
+- Plug in a second controller (port 2) and press START on it, in a menu or in game. Once gameplay starts, the game
+  pauses and each player types a name on an on-screen keyboard with their own controller (stick/D-pad to move, A to
+  type, B to delete, START when done).
+- Player 2 appears next to player 1 as a second Zeke with his own body, animation, lantern, camera and controls (same
+  buttons as player 1). Both players act separately but share the ghosts-needed / ghosts-found totals.
+- Each player has their own health and lives. Player 2's bar and lives are at the bottom right. When knocked out,
+  player 2 loses a life and comes back next to player 1 (no game over). Out of lives: START rejoins with 3 lives.
+- Names are shown above each player's head. If either player is not visible on the shared screen, the screen splits
+  vertically (player 1 left, player 2 right, each with their own follow camera); it merges again once both are
+  comfortably visible.
+- Unplugging controller 2 ends co-op (player 2 stops).
 
 ## Building a disc image
 `tools/mp/build.sh`, then extract your disc (e.g. `dtk vfs cp "<your disc>:" extracted/`, into `sys/` and `files/`),
@@ -25,7 +28,7 @@ copy `build/GHYE6S/main_mp.dol` to `extracted/sys/main.dol`, and run
 `python3 tools/mp/mkiso.py extracted HauntedMansion_coop.iso`.
 
 ## Known limitations
-- Player 2 starts at the level's spawn point rather than beside player 1.
-- Enemies, events and the main camera still focus on player 1; player 2's camera copies player 1's camera angle.
+- Enemies, scripted events and level triggers still focus on player 1 (they track the game's single "player").
+- Not tested yet: catching ghosts as player 2, level transitions through doors, player 1 game over with player 2 in.
 - A debug build (`MP_CFLAGS=-DMP_DEBUG_AUTOJOIN tools/mp/build.sh`) auto-joins player 2 with default names; Z on
-  controller 2 forces split screen.
+  controller 2 forces split screen, D-pad up teleports player 2 to player 1, D-pad down knocks player 2 out.

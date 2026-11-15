@@ -135,7 +135,7 @@ void mp_ui_update(void)
             mp.mode = MP_SOLO;
             break;
         }
-        if (mp_render_frame - kb_open_frame < 20)
+        if (mp_render_frame - kb_open_frame < 45 || ((mp.in[mp.naming_player].held & PAD_BUTTON_A) && mp_render_frame - kb_open_frame < 90))
             break;
         nav(in, &dx, &dy);
         kb_x = (kb_x + dx + KB_COLS) % KB_COLS;
