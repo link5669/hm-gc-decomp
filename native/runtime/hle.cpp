@@ -2,6 +2,7 @@
 #include "rt.h"
 #include <SDL.h>
 #include <string>
+#include <vector>
 
 // ---- guest printf ----
 static std::string guest_format(CPU *c, u32 fmt, int first_gpr) {
@@ -137,6 +138,32 @@ void pad_device_event(const SDL_Event &e) {
 }
 
 static u32 g_autopress_frame;
+// HM_SCRIPT="300:A 420:A 600:S 700:D*30" : at PADRead call N press buttons (A B X Y Z S=start U D L R; *n = hold n reads, default 4)
+static u16 script_buttons(u32 frame) {
+    static std::vector<std::pair<u32, std::pair<u32, u16>>> ev; static bool parsed;
+    if (!parsed) {
+        parsed = true;
+        const char *s = getenv("HM_SCRIPT");
+        while (s && *s) {
+            while (*s == ' ' || *s == ',') s++;
+            if (!*s) break;
+            u32 f = strtoul(s, (char **)&s, 10); if (*s == ':') s++;
+            u16 b = 0; u32 hold = 4;
+            while (*s && *s != ' ' && *s != ',' && *s != '*') {
+                switch (*s) { case 'A': b |= B_A; break; case 'B': b |= B_B; break; case 'X': b |= B_X; break; case 'Y': b |= B_Y; break;
+                case 'Z': b |= B_Z; break; case 'S': b |= B_START; break; case 'U': b |= B_UP; break; case 'D': b |= B_DOWN; break;
+                case 'L': b |= B_LEFT; break; case 'R': b |= B_RIGHT; break; }
+                s++;
+            }
+            if (*s == '*') { s++; hold = strtoul(s, (char **)&s, 10); }
+            ev.push_back({f, {hold, b}});
+        }
+    }
+    u16 b = 0;
+    for (auto &e : ev) if (frame >= e.first && frame < e.first + e.second.first) b |= e.second.second;
+    if (b && getenv("HM_SCRIPT_LOG")) LOG("[script] frame %u buttons %04X\n", frame, b);
+    return b;
+}
 extern "C" void hle_PADRead(CPU *RESTRICT c) {
     u32 st = c->r[3];
     u32 motor = 0;
@@ -146,6 +173,7 @@ extern "C" void hle_PADRead(CPU *RESTRICT c) {
         for (int b = 0; b < 12; b++) st8(st + b, 0);
         if (!p.connected) { st8(st + 10, (u8)-1); continue; }
         u16 buttons = p.buttons;
+        if (i == 0) buttons |= script_buttons(g_autopress_frame);
         if (const char *ap = getenv("HM_AUTOSTART")) {  // press Start periodically (testing)
             int every = atoi(ap); if (every > 0 && i == 0 && (g_autopress_frame % every) < 3) buttons |= B_START;
         }
