@@ -22,6 +22,7 @@ typedef struct MpState {
     u8 named[2];
     MpInput in[2];
     u32 frame;
+    u8 join_pending;    /* player 2 pressed START in a menu: start naming when gameplay begins */
     u8 want_spawn;      /* player 2 asked to spawn (latched until the next player update) */
     u8 debug_split;     /* debug: Z on controller 2 toggles split screen */
 } MpState;
@@ -29,7 +30,9 @@ typedef struct MpState {
 extern MpState mp;
 extern void *mp_player[2];
 extern u32 mp_player_seen[2], mp_render_frame;
+extern void *mp_game;
 
 void mp_ui_update(void);
+int mp_in_gameplay(void);
 void mp_ui_draw(void);
 #endif

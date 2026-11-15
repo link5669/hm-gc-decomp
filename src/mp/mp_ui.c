@@ -13,6 +13,7 @@ static const char kb_chars[4][KB_COLS + 1] = {
 enum { KEY_SPACE = 1000, KEY_DEL, KEY_DONE };
 
 static int kb_x, kb_y, name_len;
+static u32 kb_open_frame;  /* keys pressed in the first 20 frames (e.g. a held A) are ignored */
 
 static int key_at(int x, int y)
 {
@@ -35,10 +36,12 @@ static int slen(const char *s)
 
 static void start_naming(int p)
 {
+    OSReport("[mp] name entry for player %d\n", p + 1);
     mp.mode = MP_NAMING;
     mp.naming_player = p;
     kb_x = kb_y = 0;
     name_len = slen(mp.name[p]);
+    kb_open_frame = mp_render_frame;
 }
 
 /* Stick/D-pad navigation with auto-repeat. */
@@ -115,9 +118,16 @@ void mp_ui_update(void)
             mp.mode = MP_COOP;
         }
 #endif
-        /* Player 2 joins by pressing START on controller 2. Player 1 names themself first if not named yet. */
+        /* Player 2 joins by pressing START on controller 2. Names are typed in gameplay (the world is
+           paused meanwhile); a join made in the menus waits for the game to start. */
         if (mp.in[1].connected && (mp.in[1].pressed & PAD_BUTTON_START))
+            mp.join_pending = 1;
+        if (!mp.in[1].connected)
+            mp.join_pending = 0;
+        if (mp.join_pending && mp_in_gameplay()) {
+            mp.join_pending = 0;
             start_naming(mp.named[0] ? 1 : 0);
+        }
         break;
     case MP_NAMING:
         in = &mp.in[mp.naming_player];
@@ -125,6 +135,8 @@ void mp_ui_update(void)
             mp.mode = MP_SOLO;
             break;
         }
+        if (mp_render_frame - kb_open_frame < 20)
+            break;
         nav(in, &dx, &dy);
         kb_x = (kb_x + dx + KB_COLS) % KB_COLS;
         kb_y = (kb_y + dy + KB_ROWS) % KB_ROWS;
@@ -167,7 +179,7 @@ static void draw_keyboard(void)
 
     for (i = 0; i < name_len; i++)
         buf[i] = mp.name[p][i];
-    buf[i++] = ((mp.frame >> 4) & 1) && name_len < MP_NAME_MAX ? '_' : ' ';
+    buf[i++] = ((mp_render_frame >> 4) & 1) && name_len < MP_NAME_MAX ? '_' : ' ';
     buf[i] = 0;
     mp_draw_box(px + 60.0f, py + 62.0f, 260.0f, 32.0f, 0x000000A0);
     mp_draw_text(px + 70.0f, py + 66.0f, buf, 2.0f, COL_TEXT);
@@ -195,9 +207,11 @@ void mp_ui_draw(void)
 {
     switch (mp.mode) {
     case MP_SOLO:
-        if (mp.in[1].connected)
+        if (mp.join_pending)
+            mp_draw_text_centered(320.0f, 440.0f, "PLAYER 2 JOINED - NAMES WHEN THE GAME STARTS", 1.5f, 0x60C0FFFF);
+        else if (mp.in[1].connected)
             mp_draw_text_centered(320.0f, 440.0f, "PLAYER 2: PRESS START TO JOIN", 1.5f,
-                                  ((mp.frame >> 5) & 1) ? 0x60C0FFFF : 0x60C0FF90);
+                                  ((mp_render_frame >> 5) & 1) ? 0x60C0FFFF : 0x60C0FF90);
         break;
     case MP_NAMING:
         draw_keyboard();

@@ -21,6 +21,7 @@ void mp_game_render(void *game, void *gx)
 {
     int split = 0;
     extern void *mp_main_cam;
+    mp_game = game;
     mp_render_frame++;
     mp_main_cam = *(void **)((u8 *)game + 0x28);
     if (mp.mode == MP_COOP && mp_player[1] && mp_render_frame - mp_player_seen[1] <= 2)
@@ -45,6 +46,7 @@ void fn_800786B8(void *player);
 void *mp_player[2];
 u32 mp_player_seen[2];  /* render frame in which each player was last updated */
 u32 mp_render_frame;
+void *mp_game;  /* the Game object (from the Render hook) */
 
 /* Hook: Player factory -> Player init. Records created players (debug: logs who created them). */
 void mp_player_created(void *player)
@@ -55,42 +57,13 @@ void mp_player_created(void *player)
 
 void fn_80074AF4(void *player, f32 dt);
 
-static void mp_dump_players(void *p0)
-{
-    int k, off;
-    for (k = 0; k < 4; k++) {
-        u32 *w = (u32 *)((u8 *)p0 + k * 0x744);
-        for (off = 0; off < 0x744 / 4; off += 8)
-            OSReport("[mp] D%d %03x %08x %08x %08x %08x %08x %08x %08x %08x\n", k, off * 4, w[off], w[off + 1], w[off + 2],
-                     w[off + 3], w[off + 4], w[off + 5], w[off + 6], w[off + 7]);
-    }
-}
-static void *s_updated[8];
 int mp_spawn_p2(void);
 static int s_p0_frames;
 void mp_update_p2(f32 dt);
-void *fn_800F9398(void *table, const char *name);
-static int s_nupdated;
 
-/* Hook: Player vtable slot "update" (per frame). Debug: log which Player instances are updated. */
+/* Hook: Player vtable slot "update" (per frame): tracks player 1, spawns and updates player 2. */
 void mp_player_update(void *player, f32 dt)
 {
-    int i;
-    for (i = 0; i < s_nupdated; i++)
-        if (s_updated[i] == player)
-            break;
-    if (i == s_nupdated && s_nupdated < 8) {
-        s_updated[s_nupdated++] = player;
-        mp_backtrace("Player update", (u32)player, (u32)s_nupdated);
-        if (s_nupdated == 1) {
-            u8 *d = *(u8 **)((u8 *)player + 0x9c);
-            u8 *w = *(u8 **)(*(u8 **)0x8035B460 + 8);
-            void *t = fn_800F9398(w + 0x90, (char *)player + 0x8c);
-            OSReport("[mp] P0 %p d %p type %d d[0] %08x d+4 %08x name '%.8s' tmpl %p q %p c %p\n", player, d,
-                     d ? *(u16 *)(d + 4) : -1, d ? *(u32 *)d : 0, d ? *(u32 *)(d + 4) : 0, (char *)player + 0x8c, t,
-                     *(void **)((u8 *)player + 0xc), *(void **)((u8 *)player + 0x10));
-        }
-    }
     if (player == mp_player[1]) {  /* normally unreachable: player 2 is updated by mp_update_p2 */
         fn_80074AF4(player, dt);
         return;
@@ -104,8 +77,7 @@ void mp_player_update(void *player, f32 dt)
     fn_80074AF4(player, dt);
     /* player 2 appears once player 1 has been in control for a moment (after loads/intros) */
     if (mp.mode == MP_COOP && !mp_player[1]) {
-        extern u32 mp_hud_seen;
-        if (mp_render_frame - mp_hud_seen > 3)
+        if (!mp_in_gameplay())
             s_p0_frames = 0;
         else if (++s_p0_frames > 90)
             mp_spawn_p2();
@@ -114,4 +86,34 @@ void mp_player_update(void *player, f32 dt)
     }
     if (mp.mode == MP_COOP)
         mp_update_p2(dt);
+}
+
+void fn_80228A48(void *mgr, f32 dt);
+
+/* Hook: per-frame actor update (players, enemies, objects). Paused while a player types a name. */
+void mp_actor_update(void *mgr, f32 dt)
+{
+    if (mp.mode == MP_NAMING)
+        return;
+    fn_80228A48(mgr, dt);
+}
+
+extern u32 mp_hud_seen;
+/* True while the in-game HUD is being drawn (= real gameplay, not menus, movies or loading). */
+int mp_in_gameplay(void)
+{
+    /* HUD drawn + player 1 being updated + a room/spawn key set (front-end scenes have none) */
+    u8 *lm = *(u8 **)0x8035B684;
+    int hud = mp_render_frame - mp_hud_seen <= 3;
+    int p0 = mp_player[0] && mp_render_frame - mp_player_seen[0] <= 3;
+    /* cutscenes: the cinema letterbox (Game+0xb70, as Game::Render tests it) is active */
+    u8 *cine = mp_game ? *(u8 **)((u8 *)mp_game + 0xb70) : 0;
+    int cinema = cine && (*(s32 *)(cine + 0x284) != 0 || *(f32 *)(cine + 0x290) != 0.0f);
+    static u32 since, last_frame;
+    int ok = hud && p0 && lm && lm[0x1b8] != 0 && !cinema;
+    /* must hold for 2 s of rendered frames (cinematics play outside Game::Render, freezing these signals) */
+    if (!ok || mp_render_frame - last_frame > 2)
+        since = mp_render_frame;
+    last_frame = mp_render_frame;
+    return ok && mp_render_frame - since >= 120;
 }

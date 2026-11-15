@@ -10,3 +10,4 @@
 80032ba4 bl mp_hook_hud    # Game::Render: HUD (only in last split pass)
 80032bdc bl mp_hook_menu   # Game::Render: menus
 80032c44 bl mp_hook_fade   # Game::Render: fade overlay
+80254380 bl mp_actor_update   # frame: actor update (paused during name entry)

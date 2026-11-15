@@ -70,16 +70,4 @@ void mp_draw_tags(void *cam, f32 x0, f32 y0, f32 sw, f32 sh)
 extern f32 mp_view[2][16], mp_proj[2][16];
 extern u8 mp_have_mtx[2];
 
-void mp_debug_mtx(void)
-{
-    int i;
-    if (!mp_have_mtx[0] || (mp_render_frame % 240) != 5)
-        return;
-    OSReport("[mp] view:");
-    for (i = 0; i < 16; i++)
-        OSReport(" %d", (int)(mp_view[0][i] * 1000));
-    OSReport("\n[mp] proj:");
-    for (i = 0; i < 16; i++)
-        OSReport(" %d", (int)(mp_proj[0][i] * 1000));
-    OSReport("\n");
-}
+void mp_debug_mtx(void) {}

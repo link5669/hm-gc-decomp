@@ -122,12 +122,6 @@ int mp_split_render(void *game, void *gx, const f32 *eye2, const f32 *at2)
     aspect1 = F32(cam1, 0x38);
     fn_8012962C(s_cam2, F32(cam1, 0x34), aspect1 * 0.5f, F32(cam1, 0x4c), F32(cam1, 0x50));
     fn_80129710(s_cam2, eye2, at2, up);
-    if ((mp.frame & 255) == 0) {
-        f32 p1[3], p2[3];
-        mp_cam_get_pos(cam1, p1);
-        mp_cam_get_pos(s_cam2, p2);
-        OSReport("[mp] cam1 %d %d %d cam2 %d %d %d\n", (int)p1[0], (int)p1[1], (int)p1[2], (int)p2[0], (int)p2[1], (int)p2[2]);
-    }
     set_aspect(cam1, aspect1 * 0.5f);
 
     s_pane_idx = 0;
@@ -181,10 +175,5 @@ int mp_coop_render(void *game, void *gx)
         eye2[i] = p2[i] + (eye[i] - p1[i]);
         at2[i] = eye2[i] + fwd[i] * 5.0f;
     }
-    if ((mp_render_frame % 120) == 0)
-        OSReport("[mp] cam: p1 %d %d %d p2 %d %d %d eye %d %d %d fwd %d %d %d eye2 %d %d %d (x100)\n",
-                 (int)(p1[0] * 100), (int)(p1[1] * 100), (int)(p1[2] * 100), (int)(p2[0] * 100), (int)(p2[1] * 100),
-                 (int)(p2[2] * 100), (int)(eye[0] * 100), (int)(eye[1] * 100), (int)(eye[2] * 100), (int)(fwd[0] * 100),
-                 (int)(fwd[1] * 100), (int)(fwd[2] * 100), (int)(eye2[0] * 100), (int)(eye2[1] * 100), (int)(eye2[2] * 100));
     return mp_split_render(game, gx, eye2, at2);
 }

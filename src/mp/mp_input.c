@@ -19,10 +19,8 @@ static void track(MpInput *in, const PADStatus *st)
         in->sx = in->sy = 0;
     }
     if (st->err == PAD_ERR_NONE || !in->connected) {
-        in->pressed = b & ~in->held;
+        in->pressed |= b & ~in->held;  /* accumulated until the once-per-frame UI update consumes it */
         in->held = b;
-    } else {
-        in->pressed = 0;  /* keep last held state across transient errors */
     }
 }
 
@@ -40,12 +38,14 @@ u32 mp_pad_read(PADStatus *st)
     mp.frame++;
     track(&mp.in[0], &st[0]);
     track(&mp.in[1], &st[1]);
-    mp_ui_update();
     {
-        static s8 last0 = 99, last1 = 99;
-        if (st[0].err != last0 || st[1].err != last1)
-            OSReport("[mp] pad err %d,%d (call %d)\n", st[0].err, st[1].err, mp.frame);
-        last0 = st[0].err; last1 = st[1].err;
+        /* the game polls several times per frame: run the UI once per rendered frame */
+        static u32 last_frame = 0xFFFFFFFF;
+        if (mp_render_frame != last_frame) {
+            last_frame = mp_render_frame;
+            mp_ui_update();
+            mp.in[0].pressed = mp.in[1].pressed = 0;
+        }
     }
     /* The game must not see menu input while a player types a name, and port 2 never drives Zeke 1. */
     if ((was_naming || mp.mode == MP_NAMING) && st[0].err == PAD_ERR_NONE)
