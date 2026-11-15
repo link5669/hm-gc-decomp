@@ -19,6 +19,7 @@ void pad_device_event(const SDL_Event &e);
 static SDL_Window *g_win;
 static SDL_GLContext g_gl;
 static u32 g_frames; static u64 g_fps_t0;
+extern u32 g_vi_count;
 static bool g_fullscreen;
 
 void hw_poll_host() {
@@ -76,7 +77,7 @@ void present_vi_frame(u32 xfb, int w, int h) {
     if (shotdir && total % every == 0) {
         uint8_t *px; int pw, ph;
         if (gpu_frame && gpu_debug_read_xfb(&px, &pw, &ph)) {
-            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, total);
+            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, g_vi_count);
             pngw::write_png(path, px, pw, ph);
         } else if (!gpu_frame) {   // CPU XFB: convert here for the screenshot
             std::vector<u8> rgba((size_t)w * h * 4);
@@ -90,7 +91,7 @@ void present_vi_frame(u32 xfb, int w, int h) {
                     o[0] = std::clamp(r, 0, 255); o[1] = std::clamp(g, 0, 255); o[2] = std::clamp(b, 0, 255); o[3] = 255;
                 }
             }
-            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, total);
+            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, g_vi_count);
             pngw::write_png(path, rgba.data(), w, h);
         }
     }

@@ -10,3 +10,26 @@ replace fn_800C3424        hle_PADRecalibrate # PADRecalibrate
 replace fn_800C3AEC        hle_PADControlMotor # PADControlMotor
 replace fn_80273E10        hle_nop           # VMInit (ARAM virtual memory): native memory is flat
 replace fn_802743F8        hle_return1       # VMAlloc: 0x7E000000.. is backed by a host buffer (cpu.cpp)
+# memory card (runtime/card.cpp): slot A = host-file backed 59-block card, slot B empty
+replace fn_800CDAEC hle_CARDInit
+replace fn_800CDCF4 hle_CARDGetResultCode
+replace fn_800CDD24 hle_CARDFreeBlocks
+replace fn_800CDE74 hle_CARDGetSectorSize
+replace fn_800D0A3C hle_CARDCheck
+replace fn_800D0B5C hle_CARDProbe
+replace fn_800D0B94 hle_CARDProbeEx
+replace fn_800D13F8 hle_CARDMount
+replace fn_800D14DC hle_CARDUnmount
+replace fn_800D1D24 hle_CARDFormat
+replace fn_800D21EC hle_CARDFastOpen
+replace fn_800D22F0 hle_CARDOpen
+replace fn_800D240C hle_CARDClose
+replace fn_800D27B8 hle_CARDCreate
+replace fn_800D2AE8 hle_CARDReadAsync
+replace fn_800D2C2C hle_CARDRead
+replace fn_800D2E94 hle_CARDWriteAsync
+replace fn_800D315C hle_CARDDelete
+replace fn_800D339C hle_CARDGetStatus
+replace fn_800D34B0 hle_CARDSetStatusAsync
+replace fn_800D3624 hle_CARDSetStatus
+replace fn_800D366C hle_CARDGetSerialNo

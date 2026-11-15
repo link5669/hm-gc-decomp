@@ -161,11 +161,13 @@ static void deliver(CPU *c, int exc) {
     // resumed here: registers and FPU were loaded from ctx
 }
 
+extern "C" void rt_card_run_pending(CPU *RESTRICT c);
 extern "C" void rt_irq_check(CPU *RESTRICT c) {
     for (;;) {
         rt_irq_flag = 0;
         ev_run_due();
         if (!(c->msr & MSR_EE)) return;
+        rt_card_run_pending(c);
         if (irq_pending_pi_only()) { deliver(c, 4); return; }
         if (g_dec_pending) { g_dec_pending = false; deliver(c, 8); return; }
         // idle thread spinning with nothing pending: sleep until the next device event

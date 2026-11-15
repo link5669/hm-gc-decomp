@@ -101,7 +101,9 @@ static void vi_update_line() {
     for (int i = 0; i < 4; i++) { u16 hi = vi_regs[0x18 + 2 * i]; if ((hi & 0x8000) && (hi & 0x1000)) any = true; }
     pi_line(0x100, any);
 }
+u32 g_vi_count;
 void vi_event() {
+    g_vi_count++;
     gp_flush();
     vi_frame_start = tb_now();
     // DI0: retrace interrupt. DI1 likewise if enabled. (DI2/DI3 = light gun position, unused)

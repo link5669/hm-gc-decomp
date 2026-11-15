@@ -138,6 +138,7 @@ void pad_device_event(const SDL_Event &e) {
 }
 
 static u32 g_autopress_frame;
+extern u32 g_vi_count;
 // HM_SCRIPT="300:A 420:A 600:S 700:D*30" : at PADRead call N press buttons (A B X Y Z S=start U D L R; *n = hold n reads, default 4)
 static u16 script_buttons(u32 frame) {
     static std::vector<std::pair<u32, std::pair<u32, u16>>> ev; static bool parsed;
@@ -173,7 +174,7 @@ extern "C" void hle_PADRead(CPU *RESTRICT c) {
         for (int b = 0; b < 12; b++) st8(st + b, 0);
         if (!p.connected) { st8(st + 10, (u8)-1); continue; }
         u16 buttons = p.buttons;
-        if (i == 0) buttons |= script_buttons(g_autopress_frame);
+        if (i == 0) buttons |= script_buttons(g_vi_count);
         if (const char *ap = getenv("HM_AUTOSTART")) {  // press Start periodically (testing)
             int every = atoi(ap); if (every > 0 && i == 0 && (g_autopress_frame % every) < 3) buttons |= B_START;
         }

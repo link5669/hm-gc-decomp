@@ -37,4 +37,19 @@ the GPU reading guest RAM (CALL_DL), and so are indexed vertex arrays, LOAD_INDX
 TLUTs. See gpu/gpu.h.
 
 ## Building
-`native/build.sh` (needs SDL2 static at /home/mi/Decomp/ref/sdl2, gcc 13, cmake, ninja).
+1. Build the decomp + mod as usual: `ninja` then `tools/mp/build.sh` (gives build/GHYE6S/main.elf, mp/mp.elf, main_mp.dol).
+2. `native/build.sh`: recompiles main_mp.dol to C in build/native/gen and builds build/native/cmake/hauntedmansion.
+   Needs gcc/g++ 13, cmake, ninja, Python 3 and a static SDL2 (default /home/mi/Decomp/ref/sdl2, set SDL2_ROOT).
+3. `native/tools/make_appimage.sh [out.AppImage]`: single-file AppImage (uses another type-2 AppImage's runtime).
+
+The binary and the AppImage contain code translated from your copy of the game: keep them private.
+
+## Running
+`hauntedmansion [disc.iso]`. Without an argument it uses $HM_DISC or ~/.local/share/hauntedmansion/game.iso.
+Player 1: keyboard (arrows move, X=A, Z=B, C=X, S=Y, D=Z, Enter=Start, Q/W=L/R, I/J/K/L C-stick, T/F/G/H D-pad)
+plus the first game controller; player 2: the second game controller (HM_P2_PAD0=1: first controller is player 2).
+F11 or Alt+Enter toggles fullscreen.
+
+Environment: HM_SCALE (internal resolution, default 2), HM_FULLSCREEN, HM_FPS, HM_REPORT (game's OSReport output),
+HM_LOG=2 (verbose), HM_SHOTDIR/HM_SHOTEVERY (screenshots), HM_SCRIPT (scripted pad input at VI frame numbers,
+e.g. "300:S 900:A*8"), SIGUSR1 prints the guest call stack.
