@@ -5,6 +5,7 @@
 #include "../net/net.h"   // [net] online co-op
 #include <SDL.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <csignal>
 #include "../gpu/tools/png.h"
@@ -193,17 +194,100 @@ void present_vi_frame(u32 xfb, int w, int h) {
     }
 }
 
-static std::string find_disc(int argc, char **argv) {
-    if (argc > 1) return argv[1];
-    if (const char *e = getenv("HM_DISC")) return e;
-    std::vector<std::string> cands;
-    if (const char *h = getenv("HOME")) {
-        cands.push_back(std::string(h) + "/.local/share/hauntedmansion/game.iso");
+// ---- game disc selection ----
+// Order: command-line argument, $HM_DISC, the path saved in ~/.config/hauntedmansion/disc.txt (chosen with a
+// file picker on first launch). Later launches show a small start menu: Play / Change game disc / Quit.
+static std::string config_file() {
+    std::string base;
+    if (const char *x = getenv("XDG_CONFIG_HOME"); x && *x) base = x;
+    else if (const char *h = getenv("HOME"); h && *h) base = std::string(h) + "/.config";
+    else return "";
+    return base + "/hauntedmansion/disc.txt";
+}
+static std::string load_saved_disc() {
+    std::string f = config_file(), p;
+    if (FILE *fp = fopen(f.c_str(), "r")) {
+        char buf[4096];
+        if (fgets(buf, sizeof buf, fp)) { p = buf; while (!p.empty() && (p.back() == '\n' || p.back() == '\r')) p.pop_back(); }
+        fclose(fp);
     }
-    char exe[4096]; ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    if (n > 0) { exe[n] = 0; std::string d(exe); d = d.substr(0, d.rfind('/')); cands.push_back(d + "/game.iso"); }
-    for (auto &c : cands) if (access(c.c_str(), R_OK) == 0) return c;
+    return p;
+}
+static void save_disc(const std::string &path) {
+    std::string f = config_file();
+    if (f.empty()) return;
+    std::string dir = f.substr(0, f.rfind('/'));
+    std::string cmd;
+    for (size_t i = 1; i <= dir.size(); i++) if (i == dir.size() || dir[i] == '/') mkdir(dir.substr(0, i).c_str(), 0755);
+    if (FILE *fp = fopen(f.c_str(), "w")) { fprintf(fp, "%s\n", path.c_str()); fclose(fp); }
+}
+// File picker (zenity, else kdialog). Returns "" if cancelled or no picker is available.
+static std::string pick_disc(const std::string &start) {
+    const char *z = "zenity --file-selection --title='The Haunted Mansion: choose your game disc image (.iso)' "
+                    "--file-filter='GameCube disc image | *.iso *.ISO *.gcm *.GCM' --file-filter='All files | *' 2>/dev/null";
+    const char *k = "kdialog --getopenfilename \"$HOME\" 'GameCube disc image (*.iso *.gcm)' 2>/dev/null";
+    for (const char *cmd : {z, k}) {
+        std::string exe = cmd == z ? "zenity" : "kdialog";
+        if (system(("command -v " + exe + " >/dev/null 2>&1").c_str()) != 0) continue;
+        std::string full = cmd;
+        if (cmd == z && !start.empty() && start.find('\'') == std::string::npos) full += " --filename='" + start + "'";
+        FILE *p = popen(full.c_str(), "r");
+        if (!p) continue;
+        char buf[4096]; std::string out;
+        while (fgets(buf, sizeof buf, p)) out += buf;
+        pclose(p);
+        while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+        return out;
+    }
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "The Haunted Mansion",
+        "No file picker found (install zenity). Start the game with the path to your disc image as the first argument.", nullptr);
     return "";
+}
+static int start_menu(const std::string &disc) {   // 0 play, 1 change disc, 2 quit
+    std::string name = disc.substr(disc.rfind('/') + 1);
+    std::string msg = "Game disc: " + name + "\n" + disc;
+    const SDL_MessageBoxButtonData buttons[] = {
+        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 2, "Quit"},
+        {0, 1, "Change game disc..."},
+        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Play"},
+    };
+    SDL_MessageBoxData d = {SDL_MESSAGEBOX_INFORMATION, nullptr, "The Haunted Mansion", msg.c_str(), 3, buttons, nullptr};
+    int hit = 0;
+    if (SDL_ShowMessageBox(&d, &hit) != 0) return 0;   // no message box support: just play
+    return hit;
+}
+// Returns true with the disc opened; false to quit.
+static bool choose_and_open_disc(int argc, char **argv, std::string &disc) {
+    if (argc > 1) { disc = argv[1]; return disc_open(disc); }
+    if (const char *e = getenv("HM_DISC")) { disc = e; return disc_open(disc); }
+    const bool quiet = getenv("HM_HIDDEN") != nullptr;   // automated tests: no dialogs
+    std::string saved = load_saved_disc();
+    if (saved.empty() || access(saved.c_str(), R_OK) != 0) {
+        // older setups: ~/.local/share/hauntedmansion/game.iso or game.iso next to the program
+        std::vector<std::string> cands;
+        if (const char *h = getenv("HOME")) cands.push_back(std::string(h) + "/.local/share/hauntedmansion/game.iso");
+        char exe[4096]; ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+        if (n > 0) { exe[n] = 0; std::string d(exe); d = d.substr(0, d.rfind('/')); cands.push_back(d + "/game.iso"); }
+        std::string legacy;
+        for (auto &c : cands) if (access(c.c_str(), R_OK) == 0) { legacy = c; break; }
+        if (quiet) { disc = legacy; return !disc.empty() && disc_open(disc); }
+        saved.clear();
+        if (!legacy.empty()) { saved = legacy; save_disc(saved); }
+    }
+    bool ask = saved.empty();
+    if (!ask && !quiet) {
+        int r = start_menu(saved);
+        if (r == 2) return false;
+        ask = r == 1;
+    }
+    if (!ask) { disc = saved; if (disc_open(disc)) return true; ask = !quiet; if (!ask) return false; }
+    for (;;) {
+        std::string p = pick_disc(saved);
+        if (p.empty()) return false;   // cancelled
+        if (disc_open(p)) { disc = p; save_disc(p); return true; }
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "The Haunted Mansion",
+            "That file isn't a disc image of Disney's The Haunted Mansion (USA, GHYE6S). Please choose your copy of the game.", nullptr);
+    }
 }
 
 static void dump_guest(int) {
@@ -230,12 +314,9 @@ int main(int argc, char **argv) {
 
     int net_mode = net_parse_args(&argc, argv);   // [net] --host/--join/--relay/--room
     if (net_mode == 2) return net_client_main();  // [net] guest: thin client, no disc
-    std::string disc = find_disc(argc, argv);
-    if (disc.empty() || !disc_open(disc)) {
-        const char *msg = "Put your copy of the game (GHYE6S disc image, .iso) at ~/.local/share/hauntedmansion/game.iso,\n"
-                          "or pass its path as the first argument.";
-        fprintf(stderr, "%s\n", msg);
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "The Haunted Mansion", msg, nullptr);
+    std::string disc;
+    if (!choose_and_open_disc(argc, argv, disc)) {
+        fprintf(stderr, "No game disc chosen (pass the path to your GHYE6S .iso as the first argument).\n");
         return 1;
     }
 
