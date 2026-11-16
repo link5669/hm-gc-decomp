@@ -31,6 +31,9 @@ extern "C" {
 void gpu_set_scale(int scale) { s_req_scale = scale < 1 ? 1 : scale; }
 
 void gpu_set_aspect(float a) { gx::set_aspect(a); }
+void gpu_request_scale(int scale) { if (s_inited) gx::request_scale(scale); else s_req_scale = scale; }
+int gpu_get_scale(void) { return gx::g_scale; }
+float gpu_frame_gpu_ms(void) { return gx::g_frame_gpu_ms; }
 
 void gpu_init(uint8_t *ram, uint32_t ram_size) {
   gx::g_ram = ram;

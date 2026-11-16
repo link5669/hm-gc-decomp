@@ -31,6 +31,11 @@ void gpu_efb_poke(int x, int y, int is_z, uint32_t value);
 
 // Internal resolution multiplier for the EFB (1 = 640x528 native). Set before gpu_init.
 void gpu_set_scale(int scale);
+// Change the internal resolution while running (applied at the next XFB copy), current scale,
+// and the smoothed GPU time of a frame in ms (0 until measured; resets after a scale change).
+void gpu_request_scale(int scale);
+int gpu_get_scale(void);
+float gpu_frame_gpu_ms(void);
 
 // Target display aspect (4/3 = original). Other values widen the EFB (physical width = 640*scale*a/(4/3)),
 // widen the perspective FOV, keep 2D shapes (except near-full-width ortho draws, which stretch), and

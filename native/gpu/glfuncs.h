@@ -84,6 +84,7 @@
   X(PFNGLGENQUERIESPROC, GenQueries)                                                   \
   X(PFNGLBEGINQUERYPROC, BeginQuery)                                                   \
   X(PFNGLENDQUERYPROC, EndQuery)                                                       \
+  X(PFNGLGETQUERYOBJECTIVPROC, GetQueryObjectiv)                                       \
   X(PFNGLGETQUERYOBJECTUI64VPROC, GetQueryObjectui64v)
 
 #define HMGL_DECL(type, name) extern type hgl_##name;
@@ -172,6 +173,7 @@ HMGL_FUNCS(HMGL_DECL)
 #define glBeginQuery hgl_BeginQuery
 #define glEndQuery hgl_EndQuery
 #define glGetQueryObjectui64v hgl_GetQueryObjectui64v
+#define glGetQueryObjectiv hgl_GetQueryObjectiv
 
 // Returns false if any function is missing.
 bool hmgl_load(void *(*getproc)(const char *));

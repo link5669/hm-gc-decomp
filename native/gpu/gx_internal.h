@@ -177,6 +177,9 @@ struct ProfScope {
   ~ProfScope() { if (acc) *acc += now_ms() - t0; }
 };
 void prof_frame();
+void request_scale(int s);
+extern float g_frame_gpu_ms;
+extern int g_scale;
 
 // ---- capture (capture.cpp) ----
 extern bool g_cap_active;

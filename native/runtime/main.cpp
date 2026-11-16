@@ -44,6 +44,9 @@ void hw_poll_host() {
 // showing whatever frame buffer the VI scans out: a GPU copy, or a CPU-written XFB (Bink movies).
 static u32 g_copy_addr[2]; static u64 g_copy_serial;
 extern "C" __attribute__((weak)) void gpu_set_aspect(float) {}
+extern "C" __attribute__((weak)) void gpu_request_scale(int) {}
+extern "C" __attribute__((weak)) int gpu_get_scale(void) { return 1; }
+extern "C" __attribute__((weak)) float gpu_frame_gpu_ms(void) { return 0; }
 extern "C" void gpu_cb_xfb_copy(uint32_t xfb, uint32_t w, uint32_t h) {
     g_copy_addr[g_copy_serial++ & 1] = xfb & 0x01FFFFFF;
 }
@@ -54,6 +57,7 @@ static u64 xfb_sample_hash(u32 xfb, int w, int h) {
     return hsh;
 }
 
+static u32 g_ram_frames;   // CPU-XFB (movie) frames, for the dynamic-resolution controller
 void present_vi_frame(u32 xfb, int w, int h) {
     static u64 last_serial, last_hash; static u32 last_addr; static bool hash_valid;
     xfb &= 0x01FFFFFF;
@@ -77,8 +81,45 @@ void present_vi_frame(u32 xfb, int w, int h) {
         if (asp < 4.0f / 3.0f) asp = 4.0f / 3.0f;
         gpu_set_aspect(asp);
     }
-    if (gpu_frame) gpu_present(ww, wh);
-    else if (xfb && w > 0 && h > 0) gpu_present_ram_xfb(xfb, w, h, w, ww, wh);
+    if (gpu_frame) {
+        gpu_present(ww, wh);
+        // dynamic internal resolution (auto mode): trial-based on the rate of new GPU frames
+        static const bool dyn = !getenv("HM_SCALE") && getenv("HM_DYNRES");   // experimental (opt-in)
+        static u64 win_t0 = 0, last_change = 0, ban_until[9];
+        static u32 win_frames = 0, good_secs = 0, bad_secs = 0;
+        static int trial_from = 0; static float before_fps = 0;
+        u64 t = SDL_GetTicks64();
+        if (dyn) {
+            if (!win_t0) win_t0 = t;
+            win_frames++;
+            if (t - win_t0 >= 1000) {
+                float fps = win_frames * 1000.0f / (t - win_t0);
+                bool movie = g_ram_frames != 0;
+                win_frames = 0; win_t0 = t; g_ram_frames = 0;
+                int sc = gpu_get_scale();
+                if (t - last_change < 2500) { /* settling */ }
+                else if (movie || fps < 20.0f) { good_secs = bad_secs = 0; }   // movies, loading: not a GPU signal
+                else if (trial_from) {   // judge the last change
+                    bool up = sc > trial_from;
+                    if ((up && fps < 57.0f) || (!up && fps < before_fps + 3.0f && before_fps < 55.0f && fps < 55.0f)) {
+                        if (up) ban_until[sc] = t + 120000; else ban_until[trial_from] = 0;
+                        LOG("dynres: scale %d -> %d didn't pay off (%.0f fps), back to %d\n", trial_from, sc, fps, trial_from);
+                        gpu_request_scale(trial_from); last_change = t;
+                        if (!up) ban_until[0] = t + 300000;   // CPU-bound: stop lowering for a while
+                    } else LOG("dynres: scale %d (%.0f fps)\n", sc, fps);
+                    trial_from = 0; good_secs = bad_secs = 0;
+                } else {
+                    if (fps < 55.0f) { bad_secs++; good_secs = 0; } else if (fps >= 58.5f) { good_secs++; bad_secs = 0; } else good_secs = bad_secs = 0;
+                    if (bad_secs >= 4 && sc > 1 && t > ban_until[0]) {
+                        trial_from = sc; before_fps = fps; gpu_request_scale(sc - 1); last_change = t; bad_secs = 0;
+                    } else if (good_secs >= 20 && sc < 6 && t > ban_until[sc + 1]) {
+                        trial_from = sc; before_fps = fps; gpu_request_scale(sc + 1); last_change = t; good_secs = 0;
+                    }
+                }
+            }
+        }
+    }
+    else if (xfb && w > 0 && h > 0) { gpu_present_ram_xfb(xfb, w, h, w, ww, wh); g_ram_frames++; }
     else return;
     net_capture_frame(ww, wh);   // [net] stream this frame to a connected guest
     last_serial = g_copy_serial; last_addr = xfb;

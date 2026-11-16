@@ -167,11 +167,38 @@ void set_aspect(float a) {
 }
 
 // Reallocates the EFB for a new display aspect (frame boundary only). Contents are cleared.
+static int s_pending_scale = 0;
+float g_frame_gpu_ms = 0;
+void request_scale(int s) { s_pending_scale = std::max(1, std::min(s, 8)); }
+// One GL_TIME_ELAPSED query per frame (XFB copy to XFB copy), read when available (no stall).
+static void frame_timer_tick() {
+  if (g_prof_on) return;  // the profiler uses TIME_ELAPSED queries itself
+  static unsigned qs[4]; static bool used[4]; static int cur = -1, n = 0;
+  if (!n) { glGenQueries(4, qs); n = 4; }
+  if (cur >= 0) glEndQuery(GL_TIME_ELAPSED);
+  for (int i = 0; i < 4; i++) {
+    if (!used[i] || i == cur) continue;
+    int avail = 0; glGetQueryObjectiv(qs[i], GL_QUERY_RESULT_AVAILABLE, &avail);
+    if (avail) {
+      GLuint64 ns = 0; glGetQueryObjectui64v(qs[i], GL_QUERY_RESULT, &ns);
+      float ms = (float)(ns * 1e-6);
+      g_frame_gpu_ms = g_frame_gpu_ms == 0 ? ms : g_frame_gpu_ms * 0.9f + ms * 0.1f;
+      used[i] = false;
+    }
+  }
+  int next = -1;
+  for (int i = 0; i < 4; i++) if (!used[i] && i != cur) { next = i; break; }
+  cur = next;
+  if (cur >= 0) { used[cur] = true; glBeginQuery(GL_TIME_ELAPSED, qs[cur]); }
+}
 static void resize_efb(float a) {
   flush_batch();
   s_aspect = a;
+  bool scale_change = s_pending_scale && s_pending_scale != g_scale;
+  if (scale_change) { g_scale = s_pending_scale; H = EFB_H * g_scale; g_frame_gpu_ms = 0; }
+  s_pending_scale = 0;
   int nw = phys_width(a);
-  if (nw == W) return;
+  if (nw == W && !scale_change) return;
   W = nw;
   glDeleteTextures(1, &s_efb_color);
   glDeleteTextures(1, &s_efb_depth);
@@ -829,7 +856,8 @@ void efb_copy(u32 trig) {
         }
       }
       if (clear) clear_rect(sx, sy, sw, sh);
-      if (s_pending_aspect != s_aspect) resize_efb(s_pending_aspect);
+      if (s_pending_aspect != s_aspect || (s_pending_scale && s_pending_scale != g_scale)) resize_efb(s_pending_aspect);
+      frame_timer_tick();
       texcache_gc();
       g_prof.xfbs++;
       prof_frame();
