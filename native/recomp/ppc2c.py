@@ -293,8 +293,7 @@ class Gen:
         if op in (56, 57, 60, 61):
             d12 = sx(ins & 0xFFF, 12); w = (ins >> 15) & 1; i = (ins >> 12) & 7
             e = '(%s + %d)' % (RA0(), d12) if ra else '(u32)%d' % d12
-            fn = 'rt_psq_l' if op in (56, 57) else 'rt_psq_st'
-            s = 'ea = %s; %s(c, ea, %d, %d, %d);' % (e, fn, rd, w, i)
+            s = 'ea = %s; %s' % (e, self.psq(op in (56, 57), rd, w, i))
             if op in (57, 61): s += upd()
             return s
         if op == 59: return self.op59(pc, ins)
@@ -302,6 +301,16 @@ class Gen:
         if op == 4: return self.op4(pc, ins)
         if op == 3: return 'rt_trap(c, 0x%08X);' % pc  # twi
         return U()
+
+    def psq(self, load, r, w, i):
+        # inline fast path for unquantized (float) GQRs, the common case; quantized types go to the runtime
+        if load:
+            fast = ('{ c->f[%d].d = (double)ldf32(ea); c->ps1[%d] = 1.0; }' % (r, r)) if w else \
+                   ('{ c->f[%d].d = (double)ldf32(ea); c->ps1[%d] = (double)ldf32(ea + 4); }' % (r, r))
+            return 'if (likely(!(c->gqr[%d] & 0x70000))) %s else rt_psq_l(c, ea, %d, %d, %d);' % (i, fast, r, w, i)
+        fast = ('stf32(ea, (float)c->f[%d].d);' % r) if w else \
+               ('{ stf32(ea, (float)c->f[%d].d); stf32(ea + 4, (float)c->ps1[%d]); }' % (r, r))
+        return 'if (likely(!(c->gqr[%d] & 0x7))) %s else rt_psq_st(c, ea, %d, %d, %d);' % (i, fast, r, w, i)
 
     def unimpl(self, pc, ins):
         self.unk['%08X' % ins] += 1
@@ -510,8 +519,7 @@ class Gen:
         if xo6 in (6, 7, 38, 39):
             w = (ins >> 10) & 1; i = (ins >> 7) & 7
             ea = '(c->r[%d] + c->r[%d])' % (a, b) if a else 'c->r[%d]' % b
-            fn = 'rt_psq_l' if xo6 in (6, 38) else 'rt_psq_st'
-            s = 'ea = %s; %s(c, ea, %d, %d, %d);' % (ea, fn, d, w, i)
+            s = 'ea = %s; %s' % (ea, self.psq(xo6 in (6, 38), d, w, i))
             if xo6 in (38, 39): s += ' c->r[%d] = ea;' % a
             return s
         five = {10: (lambda: set2('%s + %s' % (A0, B1), C1)),

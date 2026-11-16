@@ -131,7 +131,11 @@ extern "C" void rt_mtmsr(CPU *RESTRICT c, u32 v) {
 }
 
 // ---- paired-single quantization ----
-static inline double ldexp_s(double v, int sc) { return ldexp(v, sc); }
+static double g_pow2[128];   // 2^(i-64)
+static inline double ldexp_s(double v, int sc) {
+    if (!g_pow2[0]) for (int i = 0; i < 128; i++) g_pow2[i] = ldexp(1.0, i - 64);
+    return v * g_pow2[(sc + 64) & 127];
+}
 static double dequant(u32 ea, int type, int scale, int *size) {
     switch (type) {
     case 4: *size = 1; return ldexp_s((double)ld8(ea), -scale);
