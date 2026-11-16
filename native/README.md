@@ -19,8 +19,9 @@ The game data is never in the repo. At run time the program reads the user's own
 - Guest RAM is 24 MiB, `uint8_t *ram`, big-endian contents. For any guest address `a` with
   `(a & 0x3E000000) == 0` (0x80000000/0xC0000000 mirrors), the RAM byte is `ram[a & 0x01FFFFFF]`.
   Anything else is MMIO (0xCC000000 hardware registers, 0xCC008000 write-gather pipe,
-  0xC8000000 EFB peek/poke, 0xE0000000 locked cache), handled by `runtime/mmio.cpp`.
-- CPU state is in `struct CPU` (runtime/cpu.h): r[32], f[32] and ps1[32] (doubles), cr, lr, ctr,
+  0xC8000000 EFB peek/poke, 0xE0000000 locked cache, 0x7E000000 ARAM virtual memory, which is a flat host
+  buffer here), handled by `runtime/cpu.cpp` + `runtime/hw.cpp`.
+- CPU state is in `struct CPU` (runtime/ppc.h): r[32], f[32] and ps1[32] (doubles), cr, lr, ctr,
   xer, msr, gqr[8], plus the time base and decrementer, derived from the host clock at 40.5 MHz.
 - Each guest function becomes `void fn_XXXXXXXX(CPU *c)`. `bl` is a C call, `blr` is a return, and
   `bctrl`/`bctr` go through `rt_call(c, addr)`, which uses a dense address-to-function table.
@@ -31,7 +32,8 @@ The game data is never in the repo. At run time the program reads the user's own
   from `__OSExceptionTable` with a fully saved context, exactly as the hardware stub would.
 
 ## GPU interface (gpu/gpu.h)
-The runtime feeds the GP command stream (the bytes the CPU wrote to the gather pipe while the
+The GPU module runs on its own thread (owns the GL context, presents and swaps) and is fed through a ring buffer;
+its draw-done/token interrupts are queued back to the game thread one at a time. The runtime feeds the GP command stream (the bytes the CPU wrote to the gather pipe while the
 CPU FIFO is linked to the GP FIFO) and services the GPU callbacks. Display lists are executed by
 the GPU reading guest RAM (CALL_DL), and so are indexed vertex arrays, LOAD_INDX_*, textures and
 TLUTs. See gpu/gpu.h.
@@ -50,9 +52,23 @@ Player 1: keyboard (arrows move, X=A, Z=B, C=X, S=Y, D=Z, Enter=Start, Q/W=L/R, 
 plus the first game controller; player 2: the second game controller (HM_P2_PAD0=1: first controller is player 2).
 F11 or Alt+Enter toggles fullscreen.
 
-Environment: HM_SCALE (internal resolution, default 2), HM_FULLSCREEN, HM_FPS, HM_REPORT (game's OSReport output),
-HM_LOG=2 (verbose), HM_SHOTDIR/HM_SHOTEVERY (screenshots), HM_SCRIPT (scripted pad input at VI frame numbers,
-e.g. "300:S 900:A*8"), SIGUSR1 prints the guest call stack.
+Co-op (from the `multiplayer` mod): player 2 presses Start on controller 2 during gameplay, then both players type
+a name (A types, B deletes, Start finishes). Debug menu: Z+Start (keyboard D+Enter) — player 2 AI on/off and warp
+to any area in story order.
+
+Video: widescreen at the window's aspect (wider field of view; HUD keeps its 4:3 shape; Bink movies stay 4:3),
+internal resolution picked from the monitor height (1080p -> 3x = 2560x1584 at 16:9, supersampled), anisotropic
+filtering 16x. Measured on an Intel iGPU: 57-59 fps solo at 3x, co-op split screen ~55 fps.
+
+Saves: memory card slot A is the folder ~/.local/share/hauntedmansion/card_a (one .sav + .meta per file).
+`native/tools/gci.py import FILE.gci` brings a Dolphin save over (Dolphin: GC/USA/Card A/*.gci in its user folder);
+`gci.py export Mansion1 out.gci` goes the other way.
+
+Environment: HM_SCALE (fixed internal resolution 1-8), HM_ASPECT (e.g. 4:3 to disable widescreen), HM_FULLSCREEN,
+HM_ANISO (max anisotropy), HM_GPU_THREAD=0 (render on the game thread), HM_DYNRES=1 (experimental dynamic
+resolution), HM_FPS, HM_REPORT (game's OSReport output), HM_LOG=2 (verbose), HM_SHOTDIR/HM_SHOTEVERY (screenshots),
+HM_SCRIPT (scripted pad input for tests, see runtime/hle.cpp: "300:S 900:A*8 @text +60:p2:S"), SIGUSR1 prints the
+guest call stack. Tests: `native/tools/smoketest.sh` (boot -> gameplay -> co-op join -> warp, ~5 min).
 
 ## Online co-op
 Host-authoritative remote play (code in `net/`): the host runs the game and streams video (JPEG) and audio
