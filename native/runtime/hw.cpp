@@ -39,7 +39,8 @@ void gp_write(u32 v, int size) {
         u32 p = pi_fifo_wp & 0x03FFFFFF;
         RAM[p & 0x01FFFFFF] = b[i];
         p++;
-        if (pi_fifo_end && p >= (pi_fifo_end & 0x03FFFFFF)) { p = pi_fifo_base & 0x03FFFFFF; pi_fifo_wp = p | 0x04000000; }
+        // end is a 27-bit address: GXRedirectWriteGatherPipe sets base 0 / end 0x04000000 (never wraps)
+        if (pi_fifo_end && p >= (pi_fifo_end & 0x07FFFFFF)) { p = pi_fifo_base & 0x03FFFFFF; pi_fifo_wp = p | 0x04000000; }
         else pi_fifo_wp = (pi_fifo_wp & 0x04000000) | p;
     }
     if (cp_linked()) {
