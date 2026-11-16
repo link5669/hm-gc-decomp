@@ -32,8 +32,12 @@ HERE=$(dirname "$(readlink -f "$0")")
 exec "$HERE/usr/bin/hauntedmansion" "$@"
 R
 chmod +x "$A/AppRun"
-OFF=$("$RUNTIME_SRC" --appimage-offset)
-head -c "$OFF" "$RUNTIME_SRC" > "$W/runtime"
+if [ -n "${APPIMAGE_RUNTIME_RAW:-}" ]; then   # a bare type-2 runtime (AppImage/type2-runtime releases)
+    cp "$APPIMAGE_RUNTIME_RAW" "$W/runtime"
+else                                           # take the runtime off another AppImage
+    OFF=$("$RUNTIME_SRC" --appimage-offset)
+    head -c "$OFF" "$RUNTIME_SRC" > "$W/runtime"
+fi
 mksquashfs "$A" "$W/fs.sqfs" -root-owned -noappend -comp zstd -quiet
 cat "$W/runtime" "$W/fs.sqfs" > "$OUT"
 chmod +x "$OUT"

@@ -13,8 +13,13 @@ import argparse, os, re, struct, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TC = os.path.expanduser("~/.local/share/decompnet/toolchains")
-BU = f"{TC}/gc-wii-binutils/powerpc-eabi-"
-MWCC = [f"{TC}/wibo/wibo", f"{TC}/mwcc/GC/2.6/mwcceppc.exe"]
+if os.path.isdir(TC):   # decomp.wtf machine
+    BU = f"{TC}/gc-wii-binutils/powerpc-eabi-"
+    MWCC = [f"{TC}/wibo/wibo", f"{TC}/mwcc/GC/2.6/mwcceppc.exe"]
+else:                   # tools downloaded by configure.py into build/
+    _B = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "build")
+    BU = f"{_B}/binutils/powerpc-eabi-"
+    MWCC = [f"{_B}/tools/wibo", f"{_B}/compilers/GC/2.6/mwcceppc.exe"]
 CFLAGS = ("-nodefaults -proc gekko -align powerpc -enum int -fp hardware -Cpp_exceptions off "
           "-O4,p -inline auto -use_lmw_stmw on -nosyspath -RTTI off -str reuse -sdata 0 -sdata2 0 -lang=c -maxerrors 3 "
           "-i src/mp -i tools/rea/ref/dolsdk2004/include -i tools/rea/ref/dolsdk2004/include/libc").split()

@@ -38,7 +38,24 @@ CPU FIFO is linked to the GP FIFO) and services the GPU callbacks. Display lists
 the GPU reading guest RAM (CALL_DL), and so are indexed vertex arrays, LOAD_INDX_*, textures and
 TLUTs. See gpu/gpu.h.
 
-## Building
+## Quick start (build and play)
+You need your own copy of the game: a disc image of Disney's The Haunted Mansion (USA, GHYE6S), `.iso` or `.nkit.iso`.
+
+```
+sudo apt install build-essential cmake ninja-build python3 git curl libx11-dev libxext-dev libgl-dev \
+                 libpulse-dev libasound2-dev squashfs-tools        # Debian/Ubuntu package names
+git clone -b static-recomp https://github.com/link5669/hm-gc-decomp.git && cd hm-gc-decomp
+native/build_all.sh "/path/to/The Haunted Mansion (USA).iso" --appimage
+build/native/cmake/hauntedmansion                  # or double-click build/native/HauntedMansion-x86_64.AppImage
+```
+
+`build_all.sh` extracts `main.dol` from your disc image, builds the decomp and the co-op mod, builds a static
+SDL2 (unless `SDL2_ROOT` points to one), recompiles the game to C and compiles it (about 15-30 minutes the first
+time; reruns are incremental). `--appimage` also packages a single-file AppImage. On first launch the game asks
+for your disc image and remembers it (`~/.config/hauntedmansion/disc.txt`); later launches show
+Play / Change game disc / Quit. The binary contains code translated from your copy of the game: keep it private.
+
+## Building (step by step)
 1. Build the decomp + mod as usual: `ninja` then `tools/mp/build.sh` (gives build/GHYE6S/main.elf, mp/mp.elf, main_mp.dol).
 2. `native/build.sh`: recompiles main_mp.dol to C in build/native/gen and builds build/native/cmake/hauntedmansion.
    Needs gcc/g++ 13, cmake, ninja, Python 3 and a static SDL2 (default /home/mi/Decomp/ref/sdl2, set SDL2_ROOT).
