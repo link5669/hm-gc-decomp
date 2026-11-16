@@ -12,10 +12,10 @@ big-endian guest RAM. So native code must keep *guest* data layout and addresses
 ## Pipeline (per decomp unit)
 1. `vtshim.py`: source rewrite for C++ polymorphic structs (51.5% of game code uses them). MWCC places the
    vtable pointer at the position of the first `virtual` declaration among the data members (`{int x;
-   virtual v(); int y;}`: x 0, vptr 4, y 8; with a non-polymorphic base, right after the base; a class whose
-   virtuals all come first but... see vtshim.py) and its vtable starts with an 8-byte header (slot k at
-   +8+4k). Checked against MWCC itself with verify_layout.py: 2462/2463 virtual units identical. Each polymorphic struct becomes a plain struct
-   with an explicit `void **__vt` after its data, and each virtual method an inline function that calls
+   virtual v(); int y;}`: x 0, vptr 4, y 8; virtuals first: vptr at 0; with a non-polymorphic base, right
+   after the base — checked by compiling test classes with MWCC) and its vtable starts with an 8-byte
+   header (slot k at +8+4k). verify_layout.py: 2462/2463 virtual units have MWCC's sizes. Each polymorphic
+   struct becomes a plain struct with an explicit `void **__vt` at that position, and each virtual method an inline function that calls
    `__vt[2 + k]`. Inheritance: a derived class reuses the base's `__vt` and continues the slot numbering.
 2. `clang --target=powerpc-unknown-eabi -O0 -emit-llvm` with `include/` shims for MWCC intrinsics
    (`__cntlzw`, `__fabs`, `__frsqrte`, `__lhbrx`, `__sync`, `OSRoundUp32B`...). This gives the exact
