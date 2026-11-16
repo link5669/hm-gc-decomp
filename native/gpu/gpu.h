@@ -10,6 +10,17 @@ extern "C" {
 // ram: guest main RAM (24 MiB, big-endian data). Guest physical address p maps to ram[p & 0x01FFFFFF].
 // The GL context is current on the calling thread for every gpu_* call.
 void gpu_init(uint8_t *ram, uint32_t ram_size);
+
+// ---- GPU thread (optional; HM_GPU_THREAD=0 disables) ----
+// gpu_thread_start: call before gpu_init, after releasing the GL context on the calling thread; on_start runs
+// first on the GPU thread and must make the GL context current there. Returns 1 if a GPU thread runs.
+// Afterwards every gpu_* call made from another thread is queued in stream order (FIFO data, present, ...);
+// peek/debug_read_xfb wait for the result. gpu_cb_* callbacks are then invoked on the GPU thread.
+int gpu_thread_start(void (*on_start)(void));
+int gpu_on_gpu_thread(void);   // 1 on the GPU thread, or always when not threaded
+// Runs fn(copy of arg[0..size)) on the GPU thread in stream order (immediately when not threaded).
+void gpu_run(void (*fn)(void *), const void *arg, uint32_t size);
+void gpu_sync(void);           // waits until everything queued so far has executed
 void gpu_shutdown(void);
 
 // Bytes of the GP command FIFO in stream order (any chunking; commands may span calls).

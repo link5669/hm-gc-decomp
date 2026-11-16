@@ -21,7 +21,7 @@ void tb_set(u64 v);
 static const u64 TB_HZ = 40500000ull;
 
 // event scheduler (guest thread only)
-enum EventId { EV_VI, EV_DEC, EV_DI, EV_AUDIO, EV_SI, EV_EXI, EV_COUNT };
+enum EventId { EV_VI, EV_DEC, EV_DI, EV_AUDIO, EV_SI, EV_EXI, EV_GPU, EV_COUNT };
 void ev_schedule(EventId id, u64 deadline_tb);
 void ev_cancel(EventId id);
 void ev_run_due();              // run events whose deadline passed
@@ -42,6 +42,7 @@ void hw_write(u32 addr, u32 v, int size);
 void gp_write(u32 v, int size);   // write-gather pipe
 void vi_event();
 void di_event();
+void hw_apply_gpu_events();   // PE draw-done/token raised by the GPU thread -> PE regs + PI lines (guest thread)
 void hw_poll_host();            // SDL events, called at VI retrace
 
 // disc

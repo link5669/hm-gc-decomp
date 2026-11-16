@@ -12,4 +12,8 @@ W void gpu_present(int, int) {}
 W uint32_t gpu_efb_peek(int, int, int) { return 0; }
 W void gpu_efb_poke(int, int, int, uint32_t) {}
 W void gpu_set_scale(int) {}
+W int gpu_thread_start(void (*)(void)) { return 0; }
+W int gpu_on_gpu_thread(void) { return 1; }
+W void gpu_run(void (*fn)(void *), const void *arg, uint32_t) { fn((void *)arg); }
+W void gpu_sync(void) {}
 

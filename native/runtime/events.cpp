@@ -47,6 +47,7 @@ void ev_run_due() {
         case EV_DEC: dec_event(); break;
         case EV_DI: di_event(); break;
         case EV_AUDIO: audio_event(now); break;
+        case EV_GPU: hw_apply_gpu_events(); break;
         default: break;
         }
     }

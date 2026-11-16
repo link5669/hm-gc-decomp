@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include "glfuncs.h"
 #include "gx_internal.h"
+#include "gputhread.h"
 
 #define HMGL_DEF(type, name) type hgl_##name;
 HMGL_FUNCS(HMGL_DEF)
@@ -26,16 +27,49 @@ bool hmgl_load(void *(*getproc)(const char *)) {
 static int s_req_scale = 1;
 static bool s_inited = false;
 
+namespace gx {
+void fifo_write_impl(const u8 *data, u32 len) {
+  ProfScope ps(g_prof.fifo);
+  g_epoch++;  // guest RAM may have changed since the last call
+  cap_fifo_begin(data, len);
+  fifo_feed(data, len);
+  cap_fifo_end();
+}
+}  // namespace gx
+
 extern "C" {
 
-void gpu_set_scale(int scale) { s_req_scale = scale < 1 ? 1 : scale; }
+// Starts the GPU thread (unless HM_GPU_THREAD=0). on_start runs first on that thread (make the GL
+// context current there). Returns 1 if threaded. Call before gpu_init.
+int gpu_thread_start(void (*on_start)(void)) { return gx::thr_start(on_start) ? 1 : 0; }
+int gpu_on_gpu_thread(void) { return !gx::thr_remote(); }
+void gpu_run(void (*fn)(void *), const void *arg, uint32_t size) {
+  if (!gx::thr_remote()) { fn((void *)arg); return; }
+  gx::thr_push(2, &fn, sizeof(fn), arg, size);
+}
+void gpu_sync(void) { gx::thr_sync(); }
 
-void gpu_set_aspect(float a) { gx::set_aspect(a); }
-void gpu_request_scale(int scale) { if (s_inited) gx::request_scale(scale); else s_req_scale = scale; }
+void gpu_set_scale(int scale) {
+  if (gx::thr_remote()) { gx::thr_post([scale] { gpu_set_scale(scale); }); return; }
+  s_req_scale = scale < 1 ? 1 : scale;
+}
+void gpu_set_aspect(float a) {
+  if (gx::thr_remote()) { gx::thr_post([a] { gx::set_aspect(a); }); return; }
+  gx::set_aspect(a);
+}
+void gpu_request_scale(int scale) {
+  if (gx::thr_remote()) { gx::thr_post([scale] { gpu_request_scale(scale); }); return; }
+  if (s_inited) gx::request_scale(scale); else s_req_scale = scale;
+}
 int gpu_get_scale(void) { return gx::g_scale; }
 float gpu_frame_gpu_ms(void) { return gx::g_frame_gpu_ms; }
 
 void gpu_init(uint8_t *ram, uint32_t ram_size) {
+  if (gx::thr_remote()) {
+    gx::thr_post([ram, ram_size] { gpu_init(ram, ram_size); });
+    gx::thr_sync();
+    return;
+  }
   gx::g_ram = ram;
   gx::g_ram_size = ram_size;
   if (!hmgl_load([](const char *n) { return SDL_GL_GetProcAddress(n); })) gx::logf("GL loader incomplete");
@@ -58,6 +92,11 @@ void gpu_init(uint8_t *ram, uint32_t ram_size) {
 }
 
 void gpu_shutdown(void) {
+  if (gx::thr_remote()) {
+    gx::thr_post([] { gpu_shutdown(); });
+    gx::thr_sync();
+    return;
+  }
   if (!s_inited) return;
   gx::flush_batch();
   gx::texcache_shutdown();
@@ -67,14 +106,12 @@ void gpu_shutdown(void) {
 }
 
 void gpu_fifo_write(const uint8_t *data, uint32_t len) {
-  gx::ProfScope ps(gx::g_prof.fifo);
-  gx::g_epoch++;  // guest RAM may have changed since the last call
-  gx::cap_fifo_begin(data, len);
-  gx::fifo_feed(data, len);
-  gx::cap_fifo_end();
+  if (gx::thr_remote()) { gx::thr_push(1, data, len, nullptr, 0); return; }
+  gx::fifo_write_impl(data, len);
 }
 
 void gpu_present(int win_w, int win_h) {
+  if (gx::thr_remote()) { gx::thr_post([win_w, win_h] { gpu_present(win_w, win_h); }); return; }
   gx::ProfScope ps(gx::g_prof.present);
   gx::gpu_timer(2);
   gx::present(win_w, win_h);
@@ -82,14 +119,35 @@ void gpu_present(int win_w, int win_h) {
 }
 
 void gpu_present_ram_xfb(uint32_t xfb_phys, int width, int height, int stride_pixels, int win_w, int win_h) {
+  if (gx::thr_remote()) {
+    gx::thr_post([=] { gpu_present_ram_xfb(xfb_phys, width, height, stride_pixels, win_w, win_h); });
+    return;
+  }
   gx::present_ram_xfb(xfb_phys, width, height, stride_pixels, win_w, win_h);
 }
 
-uint32_t gpu_efb_peek(int x, int y, int is_z) { return gx::efb_peek(x, y, is_z); }
-void gpu_efb_poke(int x, int y, int is_z, uint32_t value) { gx::efb_poke(x, y, is_z, value); }
+uint32_t gpu_efb_peek(int x, int y, int is_z) {
+  if (gx::thr_remote()) {
+    uint32_t r = 0, *rp = &r;
+    gx::thr_post([=] { *rp = gx::efb_peek(x, y, is_z); });
+    gx::thr_sync();
+    return r;
+  }
+  return gx::efb_peek(x, y, is_z);
+}
+void gpu_efb_poke(int x, int y, int is_z, uint32_t value) {
+  if (gx::thr_remote()) { gx::thr_post([=] { gx::efb_poke(x, y, is_z, value); }); return; }
+  gx::efb_poke(x, y, is_z, value);
+}
 
 // Extra (debug/test): reads the last XFB image as RGBA8, top row first. Returns 0 if none yet.
 int gpu_debug_read_xfb(uint8_t **rgba, int *w, int *h) {
+  if (gx::thr_remote()) {
+    int r = 0, *rp = &r;
+    gx::thr_post([=] { *rp = gpu_debug_read_xfb(rgba, w, h); });
+    gx::thr_sync();
+    return r;
+  }
   static std::vector<uint8_t> buf;
   if (!gx::read_xfb(buf, *w, *h)) return 0;
   *rgba = buf.data();

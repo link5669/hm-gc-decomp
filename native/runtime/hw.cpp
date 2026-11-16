@@ -5,6 +5,7 @@
 #include "../gpu/gpu.h"
 #include "../audio/audio.h"
 #include <ctime>
+#include <atomic>
 
 // ---------------- PI ----------------
 static u32 pi_lines;    // level-triggered device lines
@@ -53,8 +54,53 @@ static void pe_update_lines() {
     pi_line(0x200, (c & 1) && (c & 4));   // token
     pi_line(0x400, (c & 2) && (c & 8));   // finish
 }
-extern "C" void gpu_cb_draw_done(void) { pe_regs[5] |= 8; pe_update_lines(); }
-extern "C" void gpu_cb_token(uint16_t token) { pe_token = token; pe_regs[5] |= 4; pe_update_lines(); }
+// The GPU may run on its own thread: its PE events are queued here and applied on the guest thread (at the
+// next checkpoint via an immediate EV_GPU event, which also wakes an idle-sleeping guest; or on a PE read).
+// Events are delivered one at a time (the next only after the guest acknowledged the previous), so none merge
+// when the GPU thread runs ahead: the game counts draw-done callbacks.
+#include <mutex>
+#include <deque>
+static std::mutex g_gpu_ev_mu;
+static std::deque<u32> g_gpu_evq[2];   // [0] finish (0x8), [1] tokens (0x4 | token << 16); per kind, in order
+static std::atomic<int> g_gpu_evn{0};
+extern u32 g_vi_count;
+static struct { u32 vi, flag, x6c; } g_dd_trace[8]; static u32 g_dd_n;
+void hw_debug_dump() {
+    for (u32 i = 0; i < 8; i++) { auto &t = g_dd_trace[(g_dd_n + i) & 7]; fprintf(stderr, "[hw] draw-done at vi %u: flag %u x6c %u\n", t.vi, t.flag, t.x6c); }
+    fprintf(stderr, "[hw] pi lines %X mask %X pe ctrl %04X token %04X gpu events queued %d cp1 %04X\n", pi_lines, pi_mask,
+            pe_regs[5], pe_token, g_gpu_evn.load(), cp_regs[1]);
+}
+void hw_apply_gpu_events() {
+    if (!g_gpu_evn.load(std::memory_order_acquire)) return;
+    std::lock_guard<std::mutex> l(g_gpu_ev_mu);
+    bool changed = false;
+    for (auto &q : g_gpu_evq) while (!q.empty()) {
+        u32 e = q.front();
+        u32 bit = e & 0xC;
+        if (pe_regs[5] & bit) break;   // previous one of this kind not acknowledged yet
+        if (bit == 4) pe_token = e >> 16;
+        if (bit == 8) {   // debug trace: game draw-done state at delivery
+            u32 ad20 = ld32(0x8035AD20);
+            g_dd_trace[g_dd_n++ & 7] = {g_vi_count, ld32(0x8035ACE8), ad20 ? ld32(ad20 + 0x6C) : 0xFFFFFFFF};
+        }
+        pe_regs[5] |= bit;
+        q.pop_front();
+        g_gpu_evn--;
+        changed = true;
+    }
+    if (changed) pe_update_lines();
+}
+static void gpu_event(u32 e) {
+    {
+        std::lock_guard<std::mutex> l(g_gpu_ev_mu);
+        g_gpu_evq[(e & 4) ? 1 : 0].push_back(e);
+        g_gpu_evn++;
+    }
+    ev_schedule(EV_GPU, 0);   // due now: wakes ev_wait_until_next
+    rt_irq_flag = 1;
+}
+extern "C" void gpu_cb_draw_done(void) { gpu_event(8); }
+extern "C" void gpu_cb_token(uint16_t token) { gpu_event(4 | (u32)token << 16); }
 
 static u32 cp_read(u32 off) {
     gp_flush();
@@ -74,6 +120,7 @@ static void cp_write(u32 off, u16 v) {
 }
 static u32 pe_read(u32 off) {
     gp_flush();
+    hw_apply_gpu_events();
     u32 r = (off & 0x3F) >> 1;
     if (r == 7) return pe_token;
     if (r >= 8) return 0; // perf counters
@@ -86,6 +133,7 @@ static void pe_write(u32 off, u16 v) {
         st &= ~(v & 0xC);   // write 1 to clear
         pe_regs[5] = (v & 3) | st;
         pe_update_lines();
+        hw_apply_gpu_events();   // next queued GPU event, if any
         return;
     }
     pe_regs[r] = v;

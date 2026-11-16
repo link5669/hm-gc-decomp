@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <atomic>
 
 extern "C" const u8 hm_dol[]; extern "C" const u8 hm_dol_end[];
 extern "C" const u32 rt_entry_point;
@@ -19,7 +20,7 @@ void pad_device_event(const SDL_Event &e);
 
 static SDL_Window *g_win;
 static SDL_GLContext g_gl;
-static u32 g_frames; static u64 g_fps_t0;
+static u64 g_fps_t0;
 extern u32 g_vi_count;
 static bool g_fullscreen;
 
@@ -58,9 +59,15 @@ static u64 xfb_sample_hash(u32 xfb, int w, int h) {
 }
 
 static u32 g_ram_frames;   // CPU-XFB (movie) frames, for the dynamic-resolution controller
-void present_vi_frame(u32 xfb, int w, int h) {
+static std::atomic<u32> g_frames_shown;          // frames swapped (GPU thread) -> fps in the title (guest thread)
+static std::atomic<int> g_present_inflight;      // present requests queued to the GPU thread
+
+// Presentation of one VI field. Runs on the GPU thread (when the GPU module has one) in stream order, after
+// all GPU commands the guest issued before this retrace; state here is only touched on that thread.
+struct PresentReq { u32 xfb; int w, h, ww, wh; u32 vi; bool shot; };
+static void present_on_gpu(const PresentReq &q) {
     static u64 last_serial, last_hash; static u32 last_addr; static bool hash_valid;
-    xfb &= 0x01FFFFFF;
+    u32 xfb = q.xfb; int w = q.w, h = q.h, ww = q.ww, wh = q.wh;
     bool gpu_frame = g_copy_serial && (xfb == g_copy_addr[0] || xfb == g_copy_addr[1] || xfb == 0);
     if (gpu_frame && xfb && w > 0 && h > 0) {
         // a GPU copy went to this buffer; if the CPU has written over it since (Bink), show RAM instead
@@ -70,17 +77,6 @@ void present_vi_frame(u32 xfb, int w, int h) {
         else if (hs != last_hash) gpu_frame = false;
     }
     if (gpu_frame && g_copy_serial == last_serial && xfb == last_addr) return;   // nothing new
-    int ww, wh; SDL_GL_GetDrawableSize(g_win, &ww, &wh);
-    {   // widescreen: render at the window's aspect unless HM_ASPECT forces one (e.g. 4:3, 16:9, 1.78)
-        static float forced = -1;
-        if (forced < 0) {
-            forced = 0;
-            if (const char *a = getenv("HM_ASPECT")) { float x = 0, y = 0; if (sscanf(a, "%f:%f", &x, &y) == 2 && y > 0) forced = x / y; else forced = (float)atof(a); }
-        }
-        float asp = forced > 0 ? forced : (wh > 0 ? (float)ww / wh : 4.0f / 3.0f);
-        if (asp < 4.0f / 3.0f) asp = 4.0f / 3.0f;
-        gpu_set_aspect(asp);
-    }
     if (gpu_frame) {
         gpu_present(ww, wh);
         // dynamic internal resolution (auto mode): trial-based on the rate of new GPU frames
@@ -124,16 +120,15 @@ void present_vi_frame(u32 xfb, int w, int h) {
     net_capture_frame(ww, wh);   // [net] stream this frame to a connected guest
     last_serial = g_copy_serial; last_addr = xfb;
     SDL_GL_SwapWindow(g_win);
-    g_frames++;
+    g_frames_shown++;
     static u32 total; total++;
     static const char *shotdir = getenv("HM_SHOTDIR");
     static int every = getenv("HM_SHOTEVERY") ? atoi(getenv("HM_SHOTEVERY")) : 60;
-    extern volatile bool g_shot_request;
-    bool req = g_shot_request; g_shot_request = false;
+    bool req = q.shot;
     if (shotdir && (total % every == 0 || req)) {
         uint8_t *px; int pw, ph;
         if (gpu_frame && gpu_debug_read_xfb(&px, &pw, &ph)) {
-            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, g_vi_count);
+            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, q.vi);
             pngw::write_png(path, px, pw, ph);
         } else if (!gpu_frame) {   // CPU XFB: convert here for the screenshot
             std::vector<u8> rgba((size_t)w * h * 4);
@@ -147,16 +142,50 @@ void present_vi_frame(u32 xfb, int w, int h) {
                     o[0] = std::clamp(r, 0, 255); o[1] = std::clamp(g, 0, 255); o[2] = std::clamp(b, 0, 255); o[3] = 255;
                 }
             }
-            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, g_vi_count);
+            char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, q.vi);
             pngw::write_png(path, rgba.data(), w, h);
         }
     }
+}
+static void present_job(void *p) {
+    PresentReq q; memcpy(&q, p, sizeof q);
+    present_on_gpu(q);
+    g_present_inflight.fetch_sub(1);
+}
+
+// VI retrace (guest thread): post the presentation request in stream order; window/title work stays here.
+void present_vi_frame(u32 xfb, int w, int h) {
+    int ww, wh; SDL_GL_GetDrawableSize(g_win, &ww, &wh);
+    {   // widescreen: render at the window's aspect unless HM_ASPECT forces one (e.g. 4:3, 16:9, 1.78)
+        static float forced = -1;
+        if (forced < 0) {
+            forced = 0;
+            if (const char *a = getenv("HM_ASPECT")) { float x = 0, y = 0; if (sscanf(a, "%f:%f", &x, &y) == 2 && y > 0) forced = x / y; else forced = (float)atof(a); }
+        }
+        float asp = forced > 0 ? forced : (wh > 0 ? (float)ww / wh : 4.0f / 3.0f);
+        if (asp < 4.0f / 3.0f) asp = 4.0f / 3.0f;
+        gpu_set_aspect(asp);
+    }
+    extern volatile bool g_shot_request;
+    PresentReq q{xfb & 0x01FFFFFF, w, h, ww, wh, g_vi_count, g_shot_request};
+    g_shot_request = false;
+    // keep the GPU thread at most about one frame behind: wait for the previous retrace's present
+    static double bp_wait_ms = 0;
+    if (g_present_inflight.load() >= 2) {
+        u64 t0 = SDL_GetPerformanceCounter();
+        while (g_present_inflight.load() >= 2) usleep(100);
+        bp_wait_ms += (SDL_GetPerformanceCounter() - t0) * 1000.0 / SDL_GetPerformanceFrequency();
+    }
+    g_present_inflight.fetch_add(1);
+    gpu_run(present_job, &q, sizeof q);
     u64 now = SDL_GetTicks64();
     if (now - g_fps_t0 >= 1000) {
-        char t[256]; snprintf(t, sizeof t, "The Haunted Mansion  (%u fps)  %s", (unsigned)(g_frames * 1000 / (now - g_fps_t0)), net_status());   // [net] status
+        u32 n = g_frames_shown.exchange(0);
+        char t[256]; snprintf(t, sizeof t, "The Haunted Mansion  (%u fps)  %s", (unsigned)(n * 1000 / (now - g_fps_t0)), net_status());   // [net] status
         SDL_SetWindowTitle(g_win, t);
-        if (getenv("HM_FPS")) LOG("%s\n", t);
-        g_frames = 0; g_fps_t0 = now;
+        if (getenv("HM_FPS")) LOG("%s%s\n", t, getenv("HM_GPU_PROF") ? (std::string(" gpu-wait ") + std::to_string((int)bp_wait_ms) + "ms").c_str() : "");
+        bp_wait_ms = 0;
+        g_fps_t0 = now;
     }
 }
 
@@ -175,6 +204,8 @@ static std::string find_disc(int argc, char **argv) {
 
 static void dump_guest(int) {
     CPU *c = &g_cpu; u32 off;
+    void hw_debug_dump(); hw_debug_dump();
+    fprintf(stderr, "[guest] 8035ACE8=%d inflight=%d\n", (int)ld32(0x8035ACE8), g_present_inflight.load());
     fprintf(stderr, "[guest] lr=%08X (%s+0x%X) r1=%08X r3=%08X msr=%08X ctx=%08X\n", c->lr, rt_func_name(c->lr, &off), off, c->r[1], c->r[3], c->msr, ld32(0x800000D4));
     u32 sp = c->r[1];
     for (int i = 0; i < 20 && ISRAM(sp) && sp; i++) {
@@ -224,6 +255,10 @@ int main(int argc, char **argv) {
     g_gl = SDL_GL_CreateContext(g_win);
     if (!g_gl) { fprintf(stderr, "GL context: %s\n", SDL_GetError()); return 1; }
     SDL_GL_SetSwapInterval(0);
+    // GPU thread: it owns the GL context from here on (HM_GPU_THREAD=0: single-threaded)
+    SDL_GL_MakeCurrent(g_win, nullptr);
+    if (!gpu_thread_start([] { SDL_GL_MakeCurrent(g_win, g_gl); SDL_GL_SetSwapInterval(0); }))
+        SDL_GL_MakeCurrent(g_win, g_gl);
     if (getenv("HM_FULLSCREEN")) { g_fullscreen = true; SDL_SetWindowFullscreen(g_win, SDL_WINDOW_FULLSCREEN_DESKTOP); }
 
     rt_init_calls();

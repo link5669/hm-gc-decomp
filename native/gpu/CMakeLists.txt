@@ -15,7 +15,7 @@ if(NOT TARGET sdl2static)
   target_link_libraries(sdl2static INTERFACE ${SDL2_ROOT}/lib/libSDL2.a /usr/lib/x86_64-linux-gnu/libasound.so.2 pthread dl m)
 endif()
 
-add_library(hmgpu STATIC gpu.cpp fifo.cpp regs.cpp render.cpp shadergen.cpp texcodec.cpp texcache.cpp capture.cpp)
+add_library(hmgpu STATIC gpu.cpp fifo.cpp regs.cpp render.cpp shadergen.cpp texcodec.cpp texcache.cpp capture.cpp gputhread.cpp)
 target_include_directories(hmgpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # only SDL headers are needed (SDL_GL_GetProcAddress); the final executable links SDL itself
 target_include_directories(hmgpu PRIVATE $<TARGET_PROPERTY:sdl2static,INTERFACE_INCLUDE_DIRECTORIES>)
