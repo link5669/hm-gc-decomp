@@ -22,6 +22,8 @@ struct CopyEntry {
   u64 hash = 0;
   u32 epoch = ~0u;
   bool valid = false;
+  bool pending = false;  // RAM write-back not done yet; hash = RAM content before the copy
+  u32 serial = 0;
 };
 static std::unordered_map<u64, CacheEntry> s_cache;
 static std::unordered_map<u32, CopyEntry> s_copies;
@@ -46,7 +48,7 @@ void texcache_shutdown() {
   s_copies.clear();
 }
 
-void texcache_register_copy(u32 addr, unsigned gltex, int w, int h, int tex_fmt, u32 bytes) {
+void texcache_register_copy(u32 addr, unsigned gltex, int w, int h, int tex_fmt, u32 bytes, u32 serial) {
   addr &= 0x01FFFFFF;
   CopyEntry &e = s_copies[addr];
   if (e.tex && e.tex != gltex) glDeleteTextures(1, &e.tex);
@@ -58,6 +60,30 @@ void texcache_register_copy(u32 addr, unsigned gltex, int w, int h, int tex_fmt,
   e.hash = ram_ok(addr, bytes) ? data_hash(ram_ptr(addr), bytes) : 0;
   e.epoch = g_epoch;
   e.valid = true;
+  e.pending = true;
+  e.serial = serial;
+}
+
+bool texcache_copy_pending(u32 addr, u32 serial) {
+  auto it = s_copies.find(addr & 0x01FFFFFF);
+  if (it == s_copies.end()) return false;
+  CopyEntry &e = it->second;
+  if (!e.valid || !e.pending || e.serial != serial) return false;
+  u64 hh = ram_ok(addr, e.bytes) ? data_hash(ram_ptr(addr), e.bytes) : 0;
+  if (hh != e.hash) {  // the CPU overwrote the destination meanwhile: the copy is stale
+    e.valid = false;
+    return false;
+  }
+  return true;
+}
+
+void texcache_copy_resolved(u32 addr) {
+  auto it = s_copies.find(addr & 0x01FFFFFF);
+  if (it == s_copies.end()) return;
+  CopyEntry &e = it->second;
+  e.pending = false;
+  e.hash = ram_ok(addr, e.bytes) ? data_hash(ram_ptr(addr), e.bytes) : 0;
+  e.epoch = g_epoch;
 }
 
 
@@ -83,6 +109,7 @@ static int gl_wrap(u32 m) {
 }
 
 BoundTex texcache_get(int n) {
+  ProfScope ps(g_prof.texget);
   u32 base = n < 4 ? 0x80 + n : 0xA0 + (n - 4);
   u32 mode0 = bp[base], mode1 = bp[base + 4], img0 = bp[base + 8], img3 = bp[base + 0x14];
   u32 tlutr = bp[base + 0x18];
@@ -114,6 +141,7 @@ BoundTex texcache_get(int n) {
   u32 pa = addr & 0x01FFFFFF;
   // EFB copy at this address?
   auto ci = s_copies.find(pa);
+  if (ci != s_copies.end()) cap_read(pa, ci->second.bytes);
   if (ci != s_copies.end() && ci->second.valid && ci->second.fmt == fmt && ci->second.w == w && ci->second.h == h) {
     CopyEntry &e = ci->second;
     if (e.epoch != g_epoch) {
@@ -129,6 +157,7 @@ BoundTex texcache_get(int n) {
       return bt;
     }
   }
+  if (ci != s_copies.end() && ci->second.valid && ci->second.pending) copies_resolve_addr(pa);  // RAM decode needs it
 
   // total data size for all levels
   u32 total = 0;
@@ -142,6 +171,7 @@ BoundTex texcache_get(int n) {
             (ci_fmt ? ((u64)tlut_off << 20 ^ (u64)tlut_fmt << 58) : 0);
   CacheEntry &e = s_cache[key];
   e.last_use = ++s_use_counter;
+  cap_read(pa, total);
   if (!ram_ok(pa, total)) {
     bt.gltex = 0;
     return bt;
@@ -159,6 +189,7 @@ BoundTex texcache_get(int n) {
     if (th != e.tlut_hash) { need = true; e.tlut_hash = th; }
   }
   if (need) {
+    g_prof.uploads++;
     if (!e.tex) glGenTextures(1, &e.tex);
     glActiveTexture(GL_TEXTURE0 + 9);
     glBindTexture(GL_TEXTURE_2D, e.tex);

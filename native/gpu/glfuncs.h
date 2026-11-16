@@ -73,7 +73,18 @@
   X(PFNGLUNIFORM4FVPROC, Uniform4fv)                                                   \
   X(PFNGLUNIFORM2IVPROC, Uniform2iv)                                                   \
   X(PFNGLUNIFORM4IVPROC, Uniform4iv)                                                   \
-  X(PFNGLUNIFORMMATRIX4FVPROC, UniformMatrix4fv)
+  X(PFNGLUNIFORMMATRIX4FVPROC, UniformMatrix4fv)                                       \
+  X(PFNGLFENCESYNCPROC, FenceSync)                                                     \
+  X(PFNGLCLIENTWAITSYNCPROC, ClientWaitSync)                                           \
+  X(PFNGLDELETESYNCPROC, DeleteSync)                                                   \
+  X(PFNGLMAPBUFFERRANGEPROC, MapBufferRange)                                           \
+  X(PFNGLUNMAPBUFFERPROC, UnmapBuffer)                                                 \
+  X(PFNGLBUFFERSUBDATAPROC, BufferSubData)                                             \
+  X(PFNGLDRAWELEMENTSBASEVERTEXPROC, DrawElementsBaseVertex)                                             \
+  X(PFNGLGENQUERIESPROC, GenQueries)                                                   \
+  X(PFNGLBEGINQUERYPROC, BeginQuery)                                                   \
+  X(PFNGLENDQUERYPROC, EndQuery)                                                       \
+  X(PFNGLGETQUERYOBJECTUI64VPROC, GetQueryObjectui64v)
 
 #define HMGL_DECL(type, name) extern type hgl_##name;
 HMGL_FUNCS(HMGL_DECL)
@@ -150,6 +161,17 @@ HMGL_FUNCS(HMGL_DECL)
 #define glUniform2iv hgl_Uniform2iv
 #define glUniform4iv hgl_Uniform4iv
 #define glUniformMatrix4fv hgl_UniformMatrix4fv
+#define glFenceSync hgl_FenceSync
+#define glClientWaitSync hgl_ClientWaitSync
+#define glDeleteSync hgl_DeleteSync
+#define glMapBufferRange hgl_MapBufferRange
+#define glUnmapBuffer hgl_UnmapBuffer
+#define glBufferSubData hgl_BufferSubData
+#define glDrawElementsBaseVertex hgl_DrawElementsBaseVertex
+#define glGenQueries hgl_GenQueries
+#define glBeginQuery hgl_BeginQuery
+#define glEndQuery hgl_EndQuery
+#define glGetQueryObjectui64v hgl_GetQueryObjectui64v
 
 // Returns false if any function is missing.
 bool hmgl_load(void *(*getproc)(const char *));

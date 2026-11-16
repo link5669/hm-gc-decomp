@@ -40,7 +40,7 @@ void shader_key(std::string &k, const VtxComponents &comp, int pclass) {
   }
   for (int i = 0; i < 8; i++) put(k, bp[0xF6 + i] & 15);
   if (nind) put(k, bp[0x27]);
-  put(k, (bp[0xF3] >> 16) | (bp[0xF1] >> 20) << 8 | (bp[0x43] & 7) << 12 | ((bp[0x42] >> 8) & 1) << 16);
+  put(k, (bp[0xF3] >> 16) | (bp[0xF1] >> 20) << 8 | (bp[0x43] & 7) << 12 | ((bp[0x42] >> 8) & 1) << 16 | (u32)need_dual_source() << 17);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -109,6 +109,10 @@ static std::string gen_vs(const VtxComponents &comp, int pclass) {
        "  gl_Position = vec4(clip.x * vpscale.x + clip.w * vpoff.x, clip.y * vpscale.y + clip.w * vpoff.y,\n"
        "                     clip.z * vpscale.z + clip.w * vpoff.z, clip.w);\n"
        "  gl_PointSize = ptsize;\n"
+       // GX clips z to [-w, 0] in its own clip space and clamps the resulting depth (depth clamp is on)
+       "  float cdz = clip.z * (1.0 - 1e-7);\n"
+       "  gl_ClipDistance[0] = cdz + clip.w;\n"
+       "  gl_ClipDistance[1] = -cdz;\n"
        "  ivec4 lacc; vec3 ldir, cosAttn, distAttn; float dist, dist2, attn;\n";
   // lighting
   u32 ncol = xf[XF_NUMCOLORS] & 3;
@@ -247,8 +251,7 @@ static std::string gen_fs() {
        "uniform ivec4 colors[4]; uniform ivec4 kcolors[4]; uniform ivec4 alpharef;\n"
        "uniform vec4 texdim[8]; uniform vec4 tcscale[8]; uniform ivec4 indmtx[6]; uniform ivec4 indscale[2];\n"
        "uniform ivec4 fogcol; uniform vec4 fogf; uniform ivec4 fogi; uniform float dstalpha;\n"
-       "layout(location = 0, index = 0) out vec4 ocol0;\n"
-       "layout(location = 0, index = 1) out vec4 ocol1;\n"
+       "%OUTPUTS%"
        "ivec4 stex(sampler2D sm, int m, ivec2 uv) {\n"
        "  return ivec4(round(texture(sm, vec2(uv) / (texdim[m].xy * 128.0)) * 255.0));\n}\n"
        "int idot3(ivec3 x, ivec3 y) { ivec3 t = x * y; return t.x + t.y + t.z; }\n"
@@ -437,7 +440,14 @@ static std::string gen_fs() {
   if (pf == 2) s += "  prev.rb = (prev.rb >> 3); prev.rb = (prev.rb << 3) | (prev.rb >> 2);\n"
                     "  prev.g = (prev.g >> 2); prev.g = (prev.g << 2) | (prev.g >> 4);\n";
   s += "  ocol0 = vec4(prev) / 255.0;\n";
-  s += "  ocol1 = vec4(0.0, 0.0, 0.0, float(prev.a) / 255.0);\n";
+  bool dual = need_dual_source();
+  if (dual) s += "  ocol1 = vec4(0.0, 0.0, 0.0, float(prev.a) / 255.0);\n";
+  {
+    size_t op = s.find("%OUTPUTS%");
+    s.replace(op, 9, dual ? "layout(location = 0, index = 0) out vec4 ocol0;\n"
+                            "layout(location = 0, index = 1) out vec4 ocol1;\n"
+                          : "layout(location = 0) out vec4 ocol0;\n");
+  }
   if ((bp[0x42] >> 8) & 1) s += "  ocol0.a = dstalpha;\n";
   s += "}\n";
   // indtrans declaration
@@ -495,6 +505,7 @@ Program *shader_get(const std::string &key) {
   comp.has_col = (h >> 8) & 0xFF;
   comp.has_tc = (h >> 16) & 0xFF;
   int pclass = h >> 24;
+  g_prof.compiles++;
   std::string vs = gen_vs(comp, pclass), fs = gen_fs();
   if (getenv("HM_GPU_DUMPSHADERS")) fprintf(stderr, "=== VS ===\n%s\n=== FS ===\n%s\n", vs.c_str(), fs.c_str());
   auto pr = std::make_unique<Program>();

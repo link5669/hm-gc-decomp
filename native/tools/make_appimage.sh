@@ -20,6 +20,11 @@ Name=The Haunted Mansion (native)
 Exec=hauntedmansion
 Icon=hauntedmansion
 Categories=Game;
+Actions=Host;
+
+[Desktop Action Host]
+Name=Host online co-op (port 7777)
+Exec=hauntedmansion --host
 D
 cat > "$A/AppRun" <<'R'
 #!/bin/sh

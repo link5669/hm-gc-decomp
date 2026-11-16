@@ -33,6 +33,13 @@ static float b_k = 1.0f;
 static int s_xfb_w, s_xfb_h;  // host pixels
 static bool s_have_xfb = false;
 
+static unsigned s_cur_prog = 0;
+static int s_draw_idx = 0;
+static BoundTex s_last_samp[8];
+// streaming vertex/index ring buffers (written unsynchronized, orphaned on wrap)
+static const size_t VB_SIZE = 16u << 20, IB_SIZE = 4u << 20;
+static size_t s_vb_off = VB_SIZE, s_ib_off = IB_SIZE;
+
 // ---------------- batch ----------------
 static std::vector<Vertex> b_verts;
 static std::vector<u32> b_idx;
@@ -238,6 +245,9 @@ bool render_init(int scale) {
   s_present_prog = build_simple(s_fullscreen_vs, s_present_fs);
   s_yuyv_prog = build_simple(s_fullscreen_vs, s_yuyv_fs);
   glEnable(GL_PROGRAM_POINT_SIZE);
+  glEnable(GL_DEPTH_CLAMP);  // GX clamps depth to the 24-bit range instead of clipping at the depth range
+  glEnable(GL_CLIP_DISTANCE0);
+  glEnable(GL_CLIP_DISTANCE1);
   return true;
 }
 
@@ -337,17 +347,27 @@ static float fog_float(u32 v) {
   return u2f(sg << 31 | ex << 23 | mant << 12);
 }
 
+// True (and remembers the value) if the uniform at loc differs from what the program last received.
+static bool uchanged(Program *p, int loc, const void *d, size_t n) {
+  if (loc < 0) return false;
+  if ((size_t)loc >= p->ucache.size()) p->ucache.resize(loc + 1);
+  std::vector<u8> &v = p->ucache[loc];
+  if (v.size() == n && !memcmp(v.data(), d, n)) return false;
+  v.assign((const u8 *)d, (const u8 *)d + n);
+  return true;
+}
+
 static void set_uniforms(Program *p) {
   static float tmp[64 * 4];
   for (int i = 0; i < 256; i++) tmp[i] = u2f(xf[i]);
-  glUniform4fv(p->u_posmem, 64, tmp);
+  if (uchanged(p, p->u_posmem, tmp, 64 * 16)) glUniform4fv(p->u_posmem, 64, tmp);
   for (int i = 0; i < 32; i++) {
     for (int k = 0; k < 3; k++) tmp[i * 4 + k] = u2f(xf[0x400 + i * 3 + k]);
     tmp[i * 4 + 3] = 0;
   }
-  glUniform4fv(p->u_nrmmem, 32, tmp);
+  if (uchanged(p, p->u_nrmmem, tmp, 32 * 16)) glUniform4fv(p->u_nrmmem, 32, tmp);
   for (int i = 0; i < 256; i++) tmp[i] = u2f(xf[0x500 + i]);
-  glUniform4fv(p->u_postmem, 64, tmp);
+  if (uchanged(p, p->u_postmem, tmp, 64 * 16)) glUniform4fv(p->u_postmem, 64, tmp);
   float lc[32], lcos[32], ld[32], lp[32], ldir[32];
   for (int i = 0; i < 8; i++) {
     u32 b = 0x600 + 16 * i;
@@ -360,14 +380,14 @@ static void set_uniforms(Program *p) {
     }
     lcos[4 * i + 3] = ld[4 * i + 3] = lp[4 * i + 3] = ldir[4 * i + 3] = 0;
   }
-  glUniform4fv(p->u_lcol, 8, lc);
-  glUniform4fv(p->u_lcos, 8, lcos);
-  glUniform4fv(p->u_ldist, 8, ld);
-  glUniform4fv(p->u_lpos, 8, lp);
-  glUniform4fv(p->u_ldir, 8, ldir);
+  if (uchanged(p, p->u_lcol, lc, 8 * 16)) glUniform4fv(p->u_lcol, 8, lc);
+  if (uchanged(p, p->u_lcos, lcos, 8 * 16)) glUniform4fv(p->u_lcos, 8, lcos);
+  if (uchanged(p, p->u_ldist, ld, 8 * 16)) glUniform4fv(p->u_ldist, 8, ld);
+  if (uchanged(p, p->u_lpos, lp, 8 * 16)) glUniform4fv(p->u_lpos, 8, lp);
+  if (uchanged(p, p->u_ldir, ldir, 8 * 16)) glUniform4fv(p->u_ldir, 8, ldir);
   float ma[16];
   for (int i = 0; i < 4; i++) unpack_color(xf[XF_AMB0 + i], ma + 4 * i);
-  glUniform4fv(p->u_matamb, 4, ma);
+  if (uchanged(p, p->u_matamb, ma, 4 * 16)) glUniform4fv(p->u_matamb, 4, ma);
   // projection (row-major, uploaded transposed)
   float pr[6];
   for (int i = 0; i < 6; i++) pr[i] = u2f(xf[XF_PROJ + i]);
@@ -377,16 +397,16 @@ static void set_uniforms(Program *p) {
   } else {
     m[0] = pr[0]; m[3] = pr[1]; m[5] = pr[2]; m[7] = pr[3]; m[10] = pr[4]; m[11] = pr[5]; m[15] = 1;
   }
-  glUniformMatrix4fv(p->u_proj, 1, GL_TRUE, m);
+  if (uchanged(p, p->u_proj, m, 64)) glUniformMatrix4fv(p->u_proj, 1, GL_TRUE, m);
   float wd = u2f(xf[XF_VIEWPORT]), ht = u2f(xf[XF_VIEWPORT + 1]), zr = u2f(xf[XF_VIEWPORT + 2]);
   float xo = u2f(xf[XF_VIEWPORT + 3]), yo = u2f(xf[XF_VIEWPORT + 4]), fz = u2f(xf[XF_VIEWPORT + 5]);
   float offx = (float)(bits(bp[0x59], 0, 10) * 2), offy = (float)(bits(bp[0x59], 10, 10) * 2);
   float vs[4] = {wd / (EFB_W / 2.0f), ht / (EFB_H / 2.0f), 2.0f * zr / 16777216.0f, 0};
   float vo[4] = {(xo - offx) / (EFB_W / 2.0f) - 1.0f, (yo - offy) / (EFB_H / 2.0f) - 1.0f, 2.0f * fz / 16777216.0f - 1.0f, 0};
   vs[0] *= b_k;
-  glUniform4fv(p->u_vpscale, 1, vs);
-  glUniform4fv(p->u_vpoff, 1, vo);
-  glUniform1f(p->u_ptsize, std::max(1.0f, bits(bp[0x22], 8, 8) / 6.0f * g_scale));
+  if (uchanged(p, p->u_vpscale, vs, 1 * 16)) glUniform4fv(p->u_vpscale, 1, vs);
+  if (uchanged(p, p->u_vpoff, vo, 1 * 16)) glUniform4fv(p->u_vpoff, 1, vo);
+  { float ps = std::max(1.0f, bits(bp[0x22], 8, 8) / 6.0f * g_scale); if (uchanged(p, p->u_ptsize, &ps, 4)) glUniform1f(p->u_ptsize, ps); }
   // pixel
   int col[16], kc[16];
   for (int i = 0; i < 4; i++) {
@@ -399,10 +419,10 @@ static void set_uniforms(Program *p) {
     kc[4 * i + 2] = bits(tev_konst[i][1], 0, 8);
     kc[4 * i + 1] = bits(tev_konst[i][1], 12, 8);
   }
-  glUniform4iv(p->u_colors, 4, col);
-  glUniform4iv(p->u_kcolors, 4, kc);
+  if (uchanged(p, p->u_colors, col, 4 * 16)) glUniform4iv(p->u_colors, 4, col);
+  if (uchanged(p, p->u_kcolors, kc, 4 * 16)) glUniform4iv(p->u_kcolors, 4, kc);
   int ar[4] = {(int)bits(bp[0xF3], 0, 8), (int)bits(bp[0xF3], 8, 8), 0, 0};
-  glUniform4iv(p->u_alpharef, 1, ar);
+  if (uchanged(p, p->u_alpharef, ar, 1 * 16)) glUniform4iv(p->u_alpharef, 1, ar);
   float td[32], tcs[32];
   for (int i = 0; i < 8; i++) {
     td[4 * i] = (float)b_tex[i].w;
@@ -412,8 +432,8 @@ static void set_uniforms(Program *p) {
     tcs[4 * i + 1] = (float)(bits(bp[0x31 + 2 * i], 0, 16) + 1);
     tcs[4 * i + 2] = tcs[4 * i + 3] = 0;
   }
-  glUniform4fv(p->u_texdim, 8, td);
-  glUniform4fv(p->u_tcscale, 8, tcs);
+  if (uchanged(p, p->u_texdim, td, 8 * 16)) glUniform4fv(p->u_texdim, 8, td);
+  if (uchanged(p, p->u_tcscale, tcs, 8 * 16)) glUniform4fv(p->u_tcscale, 8, tcs);
   int im[24];
   for (int m3 = 0; m3 < 3; m3++) {
     u32 A = bp[0x06 + 3 * m3], B = bp[0x07 + 3 * m3], C = bp[0x08 + 3 * m3];
@@ -422,15 +442,15 @@ static void set_uniforms(Program *p) {
     r0[0] = sbits(A, 0, 11); r0[1] = sbits(B, 0, 11); r0[2] = sbits(C, 0, 11); r0[3] = 17 - sc;
     r1[0] = sbits(A, 11, 11); r1[1] = sbits(B, 11, 11); r1[2] = sbits(C, 11, 11); r1[3] = 17 - sc;
   }
-  glUniform4iv(p->u_indmtx, 6, im);
+  if (uchanged(p, p->u_indmtx, im, 6 * 16)) glUniform4iv(p->u_indmtx, 6, im);
   int fc[4] = {(int)bits(bp[0xF2], 16, 8), (int)bits(bp[0xF2], 8, 8), (int)bits(bp[0xF2], 0, 8), 0};
-  glUniform4iv(p->u_fogcol, 1, fc);
+  if (uchanged(p, p->u_fogcol, fc, 1 * 16)) glUniform4iv(p->u_fogcol, 1, fc);
   float ff[4] = {fog_float(bp[0xEE]), fog_float(bp[0xF1]), 0, 0};
-  glUniform4fv(p->u_fogf, 1, ff);
+  if (uchanged(p, p->u_fogf, ff, 1 * 16)) glUniform4fv(p->u_fogf, 1, ff);
   int fi[4] = {0, (int)(bp[0xEF] & 0xFFFFFF), 0, (int)(bp[0xF0] & 0x1F)};
   if (fi[1] == 0) fi[1] = 1;
-  glUniform4iv(p->u_fogi, 1, fi);
-  glUniform1f(p->u_dstalpha, bits(bp[0x42], 0, 8) / 255.0f);
+  if (uchanged(p, p->u_fogi, fi, 1 * 16)) glUniform4iv(p->u_fogi, 1, fi);
+  { float da = bits(bp[0x42], 0, 8) / 255.0f; if (uchanged(p, p->u_dstalpha, &da, 4)) glUniform1f(p->u_dstalpha, da); }
 }
 
 static void apply_scissor() {
@@ -450,7 +470,8 @@ static void apply_state() {
   bool has_alpha = pf == 1;
   // depth
   u32 zm = bp[0x40];
-  if (zm & 1) {
+  static bool nodepth = getenv("HM_GPU_NODEPTH") != nullptr;  // debug
+  if ((zm & 1) && !nodepth) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_NEVER + bits(zm, 1, 3));
     glDepthMask((zm >> 4) & 1);
@@ -485,6 +506,10 @@ static void apply_state() {
       cs = fix(cs); cd = fix(cd); as = fix(as); ad = fix(ad);
     }
     if (dstalpha) { as = GL_ONE; ad = GL_ZERO; }
+    if (!need_dual_source()) {  // single output: its alpha is the TEV alpha
+      auto nod = [](int f) { return f == GL_SRC1_ALPHA ? GL_SRC_ALPHA : f == GL_ONE_MINUS_SRC1_ALPHA ? GL_ONE_MINUS_SRC_ALPHA : f; };
+      cs = nod(cs); cd = nod(cd); as = nod(as); ad = nod(ad);
+    }
     glEnable(GL_BLEND);
     glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
     glBlendFuncSeparate(cs, cd, as, ad);
@@ -497,6 +522,8 @@ static void apply_state() {
   }
   // cull
   u32 cull = bits(bp[0x00], 14, 2);
+  static bool nocull = getenv("HM_GPU_NOCULL") != nullptr;  // debug
+  if (nocull) cull = 0;
   if (b_pclass != PC_TRI || cull == 0) {
     glDisable(GL_CULL_FACE);
   } else {
@@ -508,16 +535,53 @@ static void apply_state() {
   apply_scissor();
 }
 
+
 void flush_batch() {
   if (b_idx.empty()) {
     b_verts.clear();
     return;
   }
+  ProfScope ps(g_prof.flush);
+  g_prof.draws++;
+  {  // debug: HM_GPU_SKIPDRAWS=a-b skips draws a..b of each frame; HM_GPU_DRAWLOG=1 lists them
+    static int lo = -1, hi = -1, log = -1;
+    if (log < 0) {
+      log = getenv("HM_GPU_DRAWLOG") != nullptr;
+      if (const char *e = getenv("HM_GPU_SKIPDRAWS")) sscanf(e, "%d-%d", &lo, &hi);
+    }
+    int id = s_draw_idx++;
+    if (log)
+      fprintf(stderr, "draw %d: pc %d nv %zu ni %zu gm %06x cc0 %06x ac0 %06x ord %06x tex0 %06x@%06x zm %02x bm %04x proj %u vcd %05x\n",
+              id, b_pclass, b_verts.size(), b_idx.size(), bp[0], bp[0xC0], bp[0xC1], bp[0x28], bp[0x88], bp[0x94], bp[0x40],
+              bp[0x41], xf[XF_PROJ + 6], 0u);
+    if (log && !b_verts.empty()) {
+      const Vertex &v = b_verts[0];
+      u32 r = std::min<u32>(v.midx[0], 61) * 4;
+      float e[3];
+      for (int k = 0; k < 3; k++)
+        e[k] = u2f(xf[r + 4 * k]) * v.pos[0] + u2f(xf[r + 4 * k + 1]) * v.pos[1] + u2f(xf[r + 4 * k + 2]) * v.pos[2] + u2f(xf[r + 4 * k + 3]);
+      float pr[6];
+      for (int i = 0; i < 6; i++) pr[i] = u2f(xf[XF_PROJ + i]);
+      bool persp = xf[XF_PROJ + 6] == 0;
+      float cz = pr[4] * e[2] + pr[5], cw = persp ? -e[2] : 1.0f;
+      float zr = u2f(xf[XF_VIEWPORT + 2]), fz = u2f(xf[XF_VIEWPORT + 5]);
+      fprintf(stderr, "   v0 pos %g %g %g eye %g %g %g proj %g %g %g %g %g %g clipz %g w %g depth %g (zr %g fz %g) clearz %06x\n",
+              v.pos[0], v.pos[1], v.pos[2], e[0], e[1], e[2], pr[0], pr[1], pr[2], pr[3], pr[4], pr[5], cz, cw,
+              fz + zr * cz / cw, zr, fz, bp[0x51]);
+    }
+    static int dumpid = getenv("HM_GPU_DUMPDRAW") ? atoi(getenv("HM_GPU_DUMPDRAW")) : -1;
+    if (id == dumpid)
+      for (size_t i = 0; i < b_verts.size(); i++)
+        fprintf(stderr, "  vtx %zu: %g %g %g mtx %u col %02x%02x%02x%02x tc %g %g\n", i, b_verts[i].pos[0], b_verts[i].pos[1],
+                b_verts[i].pos[2], b_verts[i].midx[0], b_verts[i].col[0][0], b_verts[i].col[0][1], b_verts[i].col[0][2],
+                b_verts[i].col[0][3], b_verts[i].tc[0][0], b_verts[i].tc[0][1]);
+    if (id >= lo && id <= hi) { b_verts.clear(); b_idx.clear(); return; }
+  }
   glBindFramebuffer(GL_FRAMEBUFFER, s_efb_fbo);
   glViewport(0, 0, W, H);
   shader_key(s_key, b_comp, b_pclass);
   Program *p = shader_get(s_key);
-  glUseProgram(p->prog);
+  if (p->prog != s_cur_prog) { glUseProgram(p->prog); s_cur_prog = p->prog; }
   set_uniforms(p);
   apply_state();
   for (int n = 0; n < 8; n++) {
@@ -526,6 +590,12 @@ void flush_batch() {
     glBindTexture(GL_TEXTURE_2D, b_tex[n].gltex);
     unsigned s = s_samplers[n];
     glBindSampler(n, s);
+    BoundTex &lt = s_last_samp[n];
+    if (lt.gltex == 1 && lt.wrap_s == b_tex[n].wrap_s && lt.wrap_t == b_tex[n].wrap_t && lt.minf == b_tex[n].minf &&
+        lt.magf == b_tex[n].magf && lt.bias == b_tex[n].bias && lt.minlod == b_tex[n].minlod && lt.maxlod == b_tex[n].maxlod)
+      continue;
+    lt = b_tex[n];
+    lt.gltex = 1;  // marks "params valid"
     glSamplerParameteri(s, GL_TEXTURE_WRAP_S, b_tex[n].wrap_s);
     glSamplerParameteri(s, GL_TEXTURE_WRAP_T, b_tex[n].wrap_t);
     glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER, b_tex[n].minf);
@@ -536,12 +606,29 @@ void flush_batch() {
     glSamplerParameterf(s, GL_TEXTURE_MAX_LOD, b_tex[n].maxlod);
   }
   glBindVertexArray(s_vao);
+  size_t vbytes = b_verts.size() * sizeof(Vertex), ibytes = b_idx.size() * 4;
   glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
-  glBufferData(GL_ARRAY_BUFFER, b_verts.size() * sizeof(Vertex), b_verts.data(), GL_STREAM_DRAW);
+  s_vb_off = (s_vb_off + sizeof(Vertex) - 1) / sizeof(Vertex) * sizeof(Vertex);
+  if (s_vb_off + vbytes > VB_SIZE) {
+    glBufferData(GL_ARRAY_BUFFER, std::max(VB_SIZE, vbytes), nullptr, GL_STREAM_DRAW);
+    s_vb_off = 0;
+  }
+  void *vp = glMapBufferRange(GL_ARRAY_BUFFER, s_vb_off, vbytes,
+                              GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
+  if (vp) { memcpy(vp, b_verts.data(), vbytes); glUnmapBuffer(GL_ARRAY_BUFFER); }
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, s_ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, b_idx.size() * 4, b_idx.data(), GL_STREAM_DRAW);
+  if (s_ib_off + ibytes > IB_SIZE) {
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, std::max(IB_SIZE, ibytes), nullptr, GL_STREAM_DRAW);
+    s_ib_off = 0;
+  }
+  void *ip = glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, s_ib_off, ibytes,
+                              GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
+  if (ip) { memcpy(ip, b_idx.data(), ibytes); glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER); }
   GLenum mode = b_pclass == PC_TRI ? GL_TRIANGLES : b_pclass == PC_LINE ? GL_LINES : GL_POINTS;
-  glDrawElements(mode, (int)b_idx.size(), GL_UNSIGNED_INT, nullptr);
+  glDrawElementsBaseVertex(mode, (int)b_idx.size(), GL_UNSIGNED_INT, (const void *)s_ib_off,
+                           (int)(s_vb_off / sizeof(Vertex)));
+  s_vb_off += vbytes;
+  s_ib_off += ibytes;
   b_verts.clear();
   b_idx.clear();
 }
@@ -583,6 +670,7 @@ static void run_copy_pass(unsigned dst, int dw, int dh, int sx, int sy, int sw, 
   glDisable(GL_CULL_FACE);
   glColorMask(1, 1, 1, 1);
   glUseProgram(s_copy_prog);
+  s_cur_prog = 0;
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, s_efb_color);
   glBindSampler(0, 0);
@@ -616,8 +704,65 @@ static const int s_copy_texfmt[16] = {TF_I4, TF_I8, TF_IA4, TF_IA8, TF_RGB565, T
                                       TF_I8, TF_I8, TF_I8, TF_IA8, TF_IA8, TF_I8, TF_I8, TF_I8};
 
 
+// ---------------- async EFB-copy write-back ----------------
+struct PendingCopy {
+  unsigned pbo = 0;
+  GLsync fence = nullptr;
+  u32 dest = 0, stride = 0, serial = 0, frame = 0;
+  int dw = 0, dh = 0, tf = 0, fmt = 0;
+};
+static std::vector<PendingCopy> s_pending_copies;
+static std::vector<unsigned> s_pbo_pool;
+static u32 s_copy_serial = 0, s_frame = 0;
+static bool s_sync_copies = getenv("HM_GPU_SYNC_COPIES") != nullptr;  // old behaviour (immediate write-back)
+
+static void finish_copy(PendingCopy &pc) {
+  glClientWaitSync(pc.fence, GL_SYNC_FLUSH_COMMANDS_BIT, 2000000000ull);
+  glDeleteSync(pc.fence);
+  if (texcache_copy_pending(pc.dest, pc.serial)) {
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pc.pbo);
+    const u8 *px = (const u8 *)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, (size_t)pc.dw * pc.dh * 4, GL_MAP_READ_BIT);
+    if (px) {
+      if (getenv("HM_GPU_DUMPCOPIES")) { char fn[64]; snprintf(fn, sizeof fn, "copy_%08x_%dx%d.rgba", pc.dest, pc.dw, pc.dh); FILE *df = fopen(fn, "wb"); if (df) { fwrite(px, 1, (size_t)pc.dw * pc.dh * 4, df); fclose(df); } }
+      tex_encode(ram_ptr(pc.dest), px, pc.dw, pc.dh, pc.tf, pc.stride, pc.fmt);
+      glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+      g_epoch++;
+      texcache_copy_resolved(pc.dest);
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+  }
+  s_pbo_pool.push_back(pc.pbo);
+}
+
+// Completes write-backs whose GPU work is done (or all of them / those older than a frame when waiting).
+void copies_resolve(bool wait_all) {
+  ProfScope pr(g_prof.readback);
+  size_t j = 0;
+  for (size_t i = 0; i < s_pending_copies.size(); i++) {
+    PendingCopy &pc = s_pending_copies[i];
+    bool done = wait_all || s_frame - pc.frame >= 2 ||
+                glClientWaitSync(pc.fence, 0, 0) != GL_TIMEOUT_EXPIRED;
+    if (done) finish_copy(pc);
+    else s_pending_copies[j++] = pc;
+  }
+  s_pending_copies.resize(j);
+}
+
+void copies_resolve_addr(u32 addr) {
+  addr &= 0x01FFFFFF;
+  size_t j = 0;
+  for (size_t i = 0; i < s_pending_copies.size(); i++) {
+    PendingCopy &pc = s_pending_copies[i];
+    if ((pc.dest & 0x01FFFFFF) == addr) finish_copy(pc);
+    else s_pending_copies[j++] = pc;
+  }
+  s_pending_copies.resize(j);
+}
+
 void efb_copy(u32 trig) {
   flush_batch();
+  ProfScope ps(g_prof.copy);
+  g_prof.copies++;
   int sx = bits(bp[0x49], 0, 10), sy = bits(bp[0x49], 10, 10);
   int sw = bits(bp[0x4A], 0, 10) + 1, sh = bits(bp[0x4A], 10, 10) + 1;
   if (sx + sw > EFB_W) sw = std::max(0, EFB_W - sx);
@@ -646,12 +791,17 @@ void efb_copy(u32 trig) {
       }
       static const float gam[4] = {1.0f, 1.7f, 2.2f, 2.2f};
       filt[3] = gam[bits(trig, 7, 2)];
+      gpu_timer(1);
       run_copy_pass(s_xfb_tex, dw, dh, PX(sx), sy * g_scale, PX(sx + sw) - PX(sx), sh * g_scale, false, false,
                     6, 4, filt, yscale);
       s_have_xfb = true;
       u32 width = bits(bp[0x4D], 0, 10) * 16;
       if (!width) width = sw;
-      if (!getenv("HM_GPU_NO_XFB_RAM")) {
+      gpu_timer(0);
+      s_frame++;
+      copies_resolve(false);
+      static bool xfb_ram = getenv("HM_GPU_XFB_RAM") != nullptr;  // YUYV write-back for CPU readers (off: slow)
+      if (xfb_ram) {
         // native-resolution readback, encoded as YUYV into guest RAM for CPU readers
         int nw = sw, nh = xfb_lines;
         unsigned nt = make_tex(nw, nh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
@@ -659,7 +809,7 @@ void efb_copy(u32 trig) {
                       yscale);
         std::vector<u8> px((size_t)nw * nh * 4);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        glReadPixels(0, 0, nw, nh, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+        { ProfScope pr(g_prof.readback); glReadPixels(0, 0, nw, nh, GL_RGBA, GL_UNSIGNED_BYTE, px.data()); }
         glDeleteTextures(1, &nt);
         u32 rowb = width * 2;
         if (ram_ok(dest, rowb * nh)) {
@@ -681,6 +831,10 @@ void efb_copy(u32 trig) {
       if (clear) clear_rect(sx, sy, sw, sh);
       if (s_pending_aspect != s_aspect) resize_efb(s_pending_aspect);
       texcache_gc();
+      g_prof.xfbs++;
+      prof_frame();
+      cap_xfb();
+      s_draw_idx = 0;
       gpu_cb_xfb_copy(dest, width, xfb_lines);
       return;
     }
@@ -698,18 +852,6 @@ void efb_copy(u32 trig) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     run_copy_pass(tex, hw, dh * g_scale, PX(sx), sy * g_scale, PX(sx + sw) - PX(sx), sh * g_scale,
                   false, half, fmt, flags, filt, 1.0f);
-    // native-resolution readback for the guest RAM image
-    std::vector<u8> px((size_t)dw * dh * 4);
-    if (g_scale == 1 && !wide()) {
-      glReadPixels(0, 0, dw, dh, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
-    } else {
-      unsigned nt = make_tex(dw, dh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
-      // sample at native step: one host sample per EFB pixel
-      run_copy_pass(nt, dw, dh, PX(sx), sy * g_scale, PX(sx + sw) - PX(sx), sh * g_scale, true, half, fmt, flags,
-                    filt, 1.0f);
-      glReadPixels(0, 0, dw, dh, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
-      glDeleteTextures(1, &nt);
-    }
     u32 stride = bits(bp[0x4D], 0, 10) * 32;
     u32 bytes = 0;
     {
@@ -719,10 +861,33 @@ void efb_copy(u32 trig) {
       (void)tw;
     }
     if (stride && ram_ok(dest, bytes)) {
-      if (getenv("HM_GPU_DUMPCOPIES")) { char fn[64]; snprintf(fn, sizeof fn, "copy_%08x_%dx%d.rgba", dest, dw, dh); FILE *df = fopen(fn, "wb"); if (df) { fwrite(px.data(), 1, px.size(), df); fclose(df); } }
-      tex_encode(ram_ptr(dest), px.data(), dw, dh, tf, stride, fmt);
-      g_epoch++;
-      texcache_register_copy(dest, tex, dw, dh, tf, bytes);
+      // native-resolution image for the guest RAM copy, read back asynchronously through a PBO
+      PendingCopy pc;
+      pc.dest = dest; pc.dw = dw; pc.dh = dh; pc.tf = tf; pc.fmt = fmt; pc.stride = stride;
+      pc.serial = ++s_copy_serial;
+      pc.frame = s_frame;
+      unsigned nt = 0;
+      if (!(g_scale == 1 && !wide())) {
+        nt = make_tex(dw, dh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+        run_copy_pass(nt, dw, dh, PX(sx), sy * g_scale, PX(sx + sw) - PX(sx), sh * g_scale, true, half, fmt, flags,
+                      filt, 1.0f);
+      }
+      if (!s_pbo_pool.empty()) { pc.pbo = s_pbo_pool.back(); s_pbo_pool.pop_back(); }
+      else glGenBuffers(1, &pc.pbo);
+      {
+        ProfScope pr(g_prof.readback);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, pc.pbo);
+        glBufferData(GL_PIXEL_PACK_BUFFER, (size_t)dw * dh * 4, nullptr, GL_STREAM_READ);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, dw, dh, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        pc.fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+      }
+      if (nt) glDeleteTextures(1, &nt);
+      texcache_register_copy(dest, tex, dw, dh, tf, bytes, pc.serial);
+      s_pending_copies.push_back(pc);
+      if (s_pending_copies.size() > 32) copies_resolve(true);  // no frame boundaries seen: don't pile up
+      if (s_sync_copies) copies_resolve(true);
     } else {
       glDeleteTextures(1, &tex);
     }
@@ -754,6 +919,7 @@ void present(int ww, int wh) {
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
   glUseProgram(s_present_prog);
+  s_cur_prog = 0;
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, s_xfb_tex);
   glBindSampler(0, 0);
@@ -795,6 +961,7 @@ void present_ram_xfb(u32 addr, int w, int h, int stride, int ww, int wh) {
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
   glUseProgram(s_yuyv_prog);
+  s_cur_prog = 0;
   glBindSampler(0, 0);
   glUniform1i(glGetUniformLocation(s_yuyv_prog, "tex"), 0);
   int sz[2] = {tw * 2, h};

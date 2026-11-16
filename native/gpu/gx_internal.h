@@ -73,10 +73,13 @@ struct VtxComponents {
 
 // ---- fifo / vertex loader ----
 void fifo_reset();
+const std::vector<u8> &fifo_pending();
 void fifo_feed(const u8 *data, u32 len);
 u32 vertex_size(int vat);
 // Decodes `count` vertices from src (vat format) into out. Returns false on bad format.
-void decode_vertices(int vat, const u8 *src, u32 count, Vertex *out, VtxComponents &comp);
+// Returns the number of vertices written: vertices whose position index is all ones (0xFF / 0xFFFF) are
+// skipped (removed from the stream), as on hardware.
+u32 decode_vertices(int vat, const u8 *src, u32 count, Vertex *out, VtxComponents &comp);
 
 // ---- register writes ----
 void cp_write(u8 reg, u32 val);
@@ -120,7 +123,13 @@ void texcache_init();
 void texcache_shutdown();
 // Resolves texmap n from the current BP state into a GL texture.
 BoundTex texcache_get(int n);
-void texcache_register_copy(u32 addr, unsigned gltex, int w, int h, int tex_fmt, u32 bytes);
+// EFB copy textures. The GL texture is the source of truth; the RAM image is written back asynchronously
+// (pending until copies_resolve). While pending, the entry stays valid as long as the RAM there is unchanged.
+void texcache_register_copy(u32 addr, unsigned gltex, int w, int h, int tex_fmt, u32 bytes, u32 serial);
+bool texcache_copy_pending(u32 addr, u32 serial);  // still current and RAM untouched by the CPU?
+void texcache_copy_resolved(u32 addr);              // RAM image written; rehash
+void copies_resolve(bool wait_all);                 // render.cpp: finish async write-backs
+void copies_resolve_addr(u32 addr);
 void tlut_load();
 void texcache_gc();
 
@@ -134,6 +143,7 @@ struct Program {
   int u_proj, u_vpscale, u_vpoff, u_ptsize;
   int u_colors, u_kcolors, u_alpharef, u_texdim, u_tcscale, u_indmtx, u_indscale, u_fogcol, u_fogf, u_fogi,
       u_dstalpha;
+  std::vector<std::vector<u8>> ucache;  // last uploaded uniform values, indexed by location
 };
 void shader_key(std::string &key, const VtxComponents &comp, int prim);
 Program *shader_get(const std::string &key);
@@ -141,5 +151,38 @@ void shader_shutdown();
 unsigned compile_program(const char *vs, const char *fs, bool dual_source);
 
 void logf(const char *fmt, ...);
+
+// Dual-source output (separate blend alpha) is only needed when destination alpha replaces the written
+// alpha while blending uses the source alpha. Intel GPUs run dual-source shaders at half rate (SIMD8).
+inline bool need_dual_source() {
+  u32 bm = bp[0x41];
+  if (!((bp[0x42] >> 8) & 1) || !(bm & 1) || ((bm >> 11) & 1)) return false;
+  u32 s = bits(bm, 8, 3), d = bits(bm, 5, 3);
+  return s == 4 || s == 5 || d == 4 || d == 5;
+}
+
+// ---- profiling (HM_GPU_PROF=1) ----
+struct Prof {
+  double fifo, flush, texget, readback, copy, present;
+  u32 draws, copies, xfbs, uploads, compiles;
+  double gpu[4];  // GPU ms: frame draws+tex copies, xfb copy, present, (unused)
+};
+void gpu_timer(int slot);  // switch the running GPU timer query to slot (-1 = stop)
+extern Prof g_prof;
+extern bool g_prof_on;
+double now_ms();
+struct ProfScope {
+  double *acc, t0;
+  explicit ProfScope(double &a) : acc(g_prof_on ? &a : nullptr), t0(g_prof_on ? now_ms() : 0) {}
+  ~ProfScope() { if (acc) *acc += now_ms() - t0; }
+};
+void prof_frame();
+
+// ---- capture (capture.cpp) ----
+extern bool g_cap_active;
+void cap_read(u32 addr, u32 len);
+void cap_fifo_begin(const u8 *data, u32 len);
+void cap_fifo_end();
+void cap_xfb();
 
 }  // namespace gx

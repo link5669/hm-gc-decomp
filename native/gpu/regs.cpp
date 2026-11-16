@@ -89,6 +89,7 @@ void tlut_load() {
   if (tm >= sizeof(tmem)) return;
   if (tm + bytes > sizeof(tmem)) bytes = sizeof(tmem) - tm;
   if (!ram_ok(addr, bytes)) return;
+  cap_read(addr, bytes);
   memcpy(tmem + tm, ram_ptr(addr), bytes);
 }
 

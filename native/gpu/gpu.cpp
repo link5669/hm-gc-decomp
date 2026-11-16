@@ -1,5 +1,6 @@
 // C ABI entry points (gpu.h).
 #include <SDL.h>
+#include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include "glfuncs.h"
@@ -63,11 +64,19 @@ void gpu_shutdown(void) {
 }
 
 void gpu_fifo_write(const uint8_t *data, uint32_t len) {
+  gx::ProfScope ps(gx::g_prof.fifo);
   gx::g_epoch++;  // guest RAM may have changed since the last call
+  gx::cap_fifo_begin(data, len);
   gx::fifo_feed(data, len);
+  gx::cap_fifo_end();
 }
 
-void gpu_present(int win_w, int win_h) { gx::present(win_w, win_h); }
+void gpu_present(int win_w, int win_h) {
+  gx::ProfScope ps(gx::g_prof.present);
+  gx::gpu_timer(2);
+  gx::present(win_w, win_h);
+  gx::gpu_timer(0);
+}
 
 void gpu_present_ram_xfb(uint32_t xfb_phys, int width, int height, int stride_pixels, int win_w, int win_h) {
   gx::present_ram_xfb(xfb_phys, width, height, stride_pixels, win_w, win_h);
@@ -87,6 +96,54 @@ int gpu_debug_read_xfb(uint8_t **rgba, int *w, int *h) {
 }  // extern "C"
 
 namespace gx {
+Prof g_prof;
+bool g_prof_on = getenv("HM_GPU_PROF") != nullptr;
+double now_ms() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec * 1e3 + ts.tv_nsec * 1e-6;
+}
+// GPU timer queries (profiling only): one query at a time, results collected a few frames later.
+struct TQ { unsigned q; int slot; };
+static std::vector<TQ> s_tq_pending;
+static std::vector<unsigned> s_tq_free;
+static int s_tq_slot = -1;
+void gpu_timer(int slot) {
+  if (!g_prof_on) return;
+  if (s_tq_slot >= 0) glEndQuery(GL_TIME_ELAPSED);
+  s_tq_slot = slot;
+  if (slot < 0) return;
+  unsigned q;
+  if (!s_tq_free.empty()) { q = s_tq_free.back(); s_tq_free.pop_back(); }
+  else glGenQueries(1, &q);
+  glBeginQuery(GL_TIME_ELAPSED, q);
+  s_tq_pending.push_back({q, slot});
+  if (s_tq_pending.size() > 64) {  // collect old results
+    size_t n = s_tq_pending.size() - 32;
+    for (size_t i = 0; i < n; i++) {
+      GLuint64 ns = 0;
+      glGetQueryObjectui64v(s_tq_pending[i].q, GL_QUERY_RESULT, &ns);
+      g_prof.gpu[s_tq_pending[i].slot] += ns * 1e-6;
+      s_tq_free.push_back(s_tq_pending[i].q);
+    }
+    s_tq_pending.erase(s_tq_pending.begin(), s_tq_pending.begin() + n);
+  }
+}
+
+void prof_frame() {
+  if (!g_prof_on) return;
+  static double t0 = now_ms();
+  double t = now_ms();
+  if (g_prof.xfbs < 60) return;
+  double n = g_prof.xfbs;
+  fprintf(stderr, "[gpu prof] GPU ms/frame: draws %.2f xfbcopy %.2f present %.2f\n", g_prof.gpu[0] / n,
+          g_prof.gpu[1] / n, g_prof.gpu[2] / n);
+  fprintf(stderr, "[gpu prof] %.1f ms/frame wall | fifo %.2f (flush %.2f texget %.2f copy %.2f readback %.2f) present %.2f | per frame: %.0f draws %.1f copies %.1f uploads %.2f compiles\n",
+          (t - t0) / n, g_prof.fifo / n, g_prof.flush / n, g_prof.texget / n, g_prof.copy / n, g_prof.readback / n,
+          g_prof.present / n, g_prof.draws / n, g_prof.copies / n, g_prof.uploads / n, g_prof.compiles / n);
+  g_prof = Prof();
+  t0 = t;
+}
 u8 *g_ram;
 u32 g_ram_size;
 }

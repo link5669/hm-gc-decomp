@@ -1,6 +1,9 @@
 // GP command FIFO parser and vertex loader.
 #include <cstdio>
 #include <cstdarg>
+#include <cmath>
+#include <cstdlib>
+#include <algorithm>
 #include "gx_internal.h"
 
 namespace gx {
@@ -19,6 +22,8 @@ void logf(const char *fmt, ...) {
   fputc('\n', stderr);
   va_end(ap);
 }
+
+const std::vector<u8> &fifo_pending() { return s_pending; }
 
 void fifo_reset() {
   s_pending.clear();
@@ -140,10 +145,11 @@ static const u8 *attr_ptr(const u8 *&p, int type, int arr, u32 sub = 0) {
   u32 addr = cp.array_base[arr] + idx * cp.array_stride[arr] + sub;
   static const u8 zeros[64] = {};
   if (!ram_ok(addr, 48)) return zeros;
+  if (g_cap_active) cap_read(addr, 48);
   return ram_ptr(addr);
 }
 
-void decode_vertices(int vat, const u8 *src, u32 count, Vertex *out, VtxComponents &comp) {
+u32 decode_vertices(int vat, const u8 *src, u32 count, Vertex *out, VtxComponents &comp) {
   VtxDesc d;
   get_desc(vat, d);
   comp.has_nrm = d.nrm.type ? (d.nrm.cnt ? 2 : 1) : 0;
@@ -170,8 +176,10 @@ void decode_vertices(int vat, const u8 *src, u32 count, Vertex *out, VtxComponen
   for (int i = 0; i < 8; i++) tscale[i] = 1.0f / (float)(1u << d.tex[i].shift);
 
   const u8 *p = src;
+  u32 nout = 0;
   for (u32 n = 0; n < count; n++) {
-    Vertex &v = out[n];
+    Vertex &v = out[nout];
+    bool skip = false;
     memset(&v, 0, sizeof(v));
     for (int i = 0; i < 9; i++) v.midx[i] = defidx[i];
     v.col[0][0] = v.col[0][1] = v.col[0][2] = v.col[0][3] = 255;
@@ -181,12 +189,26 @@ void decode_vertices(int vat, const u8 *src, u32 count, Vertex *out, VtxComponen
       if (d.texmtx[i]) v.midx[1 + i] = *p++ & 63;
     // position
     if (d.pos.type) {
+      if (d.pos.type == 2) skip = *p == 0xFF;
+      else if (d.pos.type == 3) skip = be16(p) == 0xFFFF;
       const u8 *q = d.pos.type == 1 ? p : attr_ptr(p, d.pos.type, 0);
       const u8 *q0 = q;
       v.pos[0] = read_comp(q, d.pos.fmt, pscale);
       v.pos[1] = read_comp(q, d.pos.fmt, pscale);
       v.pos[2] = d.pos.cnt ? read_comp(q, d.pos.fmt, pscale) : 0.0f;
       if (d.pos.type == 1) p += (q - q0);
+      static bool dbgv = getenv("HM_GPU_DEBUGVTX") != nullptr;
+      if (dbgv && !(std::fabs(v.pos[0]) < 1e6f && std::fabs(v.pos[1]) < 1e6f && std::fabs(v.pos[2]) < 1e6f)) {
+        static int nrep = 0;
+        if (nrep++ < 40) {
+          const u8 *vs = src + (size_t)n * desc_size(d);
+          fprintf(stderr, "[gpu vtx] vat %d n %u/%u vcd %05x/%04x A %08x posfmt %d cnt %d shift %d type %d base %08x stride %u raw:",
+                  vat, n, count, cp.vcd_lo, cp.vcd_hi, cp.vat_a[vat], d.pos.fmt, d.pos.cnt, d.pos.shift, d.pos.type,
+                  cp.array_base[0], cp.array_stride[0]);
+          for (u32 k = 0; k < desc_size(d) && k < 24; k++) fprintf(stderr, " %02x", vs[k]);
+          fprintf(stderr, "\n");
+        }
+      }
     }
     // normal / NBT
     if (d.nrm.type) {
@@ -226,7 +248,9 @@ void decode_vertices(int vat, const u8 *src, u32 count, Vertex *out, VtxComponen
       v.tc[t][1] = d.tex[t].cnt ? read_comp(q, d.tex[t].fmt, tscale[t]) : 0.0f;
       if (d.tex[t].type == 1) p += (q - q0);
     }
+    if (!skip) nout++;
   }
+  return nout;
 }
 
 // ---------------- command parser ----------------
@@ -237,11 +261,43 @@ static void load_indexed(int which, u32 v) {
   int arr = 12 + which;
   u32 src = cp.array_base[arr] + idx * cp.array_stride[arr];
   if (!ram_ok(src, size * 4)) return;
+  cap_read(src, size * 4);
   const u8 *p = ram_ptr(src);
   for (u32 i = 0; i < size; i++) xf_write(addr + i, be32(p + 4 * i));
 }
 
 static void run_dl(u32 addr, u32 size);
+
+// Debug (HM_GPU_DEBUG=1): report small perspective draws whose screen bbox is large, to find stray geometry.
+static void debug_check_prim(u8 op, int vat, const u8 *raw, u32 cnt, const Vertex *v, u32 n, int dl) {
+  static int reports = 0;
+  if (reports > 4000 || xf[XF_PROJ + 6] != 0) return;
+  float p[6];
+  for (int i = 0; i < 6; i++) p[i] = u2f(xf[XF_PROJ + i]);
+  float wd = u2f(xf[XF_VIEWPORT]), ht = u2f(xf[XF_VIEWPORT + 1]), xo = u2f(xf[XF_VIEWPORT + 3]) - 342, yo = u2f(xf[XF_VIEWPORT + 4]) - 342;
+  float mnx = 1e9, mny = 1e9, mxx = -1e9, mxy = -1e9;
+  int behind = 0;
+  for (u32 i = 0; i < n; i++) {
+    u32 r = std::min<u32>(v[i].midx[0], 61) * 4;
+    float e[3];
+    for (int k = 0; k < 3; k++)
+      e[k] = u2f(xf[r + 4 * k]) * v[i].pos[0] + u2f(xf[r + 4 * k + 1]) * v[i].pos[1] + u2f(xf[r + 4 * k + 2]) * v[i].pos[2] + u2f(xf[r + 4 * k + 3]);
+    float w = -e[2];
+    if (w <= 0.01f) { behind++; continue; }
+    float sx = xo + wd * (p[0] * e[0] + p[1] * e[2]) / w, sy = yo + ht * (p[2] * e[1] + p[3] * e[2]) / w;
+    mnx = std::min(mnx, sx); mxx = std::max(mxx, sx); mny = std::min(mny, sy); mxy = std::max(mxy, sy);
+  }
+  float cx0 = std::max(mnx, 0.f), cx1 = std::min(mxx, 640.f), cy0 = std::max(mny, 0.f), cy1 = std::min(mxy, 480.f);
+  float area = (cx1 > cx0 && cy1 > cy0) ? (cx1 - cx0) * (cy1 - cy0) : 0;
+  if (area < 640 * 480 * 0.05f || n > 200) return;
+  reports++;
+  u32 gm = bp[0];
+  fprintf(stderr, "[gpu dbg] prim %02x vat %d n %u dl%d behind %d bbox %.0f,%.0f-%.0f,%.0f mtx %u vcd %05x/%04x vatA %08x tev %u stages c0 %06x a0 %06x ord %06x tex0 %06x/%06x zm %02x bm %04x col0 %02x%02x%02x%02x pos0 %g %g %g\n",
+          op, vat, n, dl, behind, mnx, mny, mxx, mxy, v[0].midx[0], cp.vcd_lo, cp.vcd_hi, cp.vat_a[vat], bits(gm, 10, 4) + 1,
+          bp[0xC0], bp[0xC1], bp[0x28], bp[0x88], bp[0x94], bp[0x40], bp[0x41], v[0].col[0][0], v[0].col[0][1], v[0].col[0][2],
+          v[0].col[0][3], v[0].pos[0], v[0].pos[1], v[0].pos[2]);
+  (void)raw; (void)cnt;
+}
 
 // Parses commands from p[0..n). Returns the number of bytes consumed (complete commands only).
 static size_t run(const u8 *p, size_t n) {
@@ -299,8 +355,10 @@ static size_t run(const u8 *p, size_t n) {
         static std::vector<Vertex> verts;
         if (verts.size() < cnt) verts.resize(cnt);
         VtxComponents comp;
-        decode_vertices(vat, c + 3, cnt, verts.data(), comp);
-        add_primitive(prim, verts.data(), cnt, comp);
+        u32 n = decode_vertices(vat, c + 3, cnt, verts.data(), comp);
+        static bool dbg = getenv("HM_GPU_DEBUG") != nullptr;
+        if (dbg) debug_check_prim(op, vat, c + 3, cnt, verts.data(), n, s_dl_depth);
+        if (n) add_primitive(prim, verts.data(), n, comp);
       }
       i += need;
       continue;
@@ -318,6 +376,7 @@ static void run_dl(u32 addr, u32 size) {
     logf("CALL_DL out of range %08x %x", addr, size);
     return;
   }
+  cap_read(addr, size);
   // copy: the display list may be modified by a nested copy (EFB copy writes RAM)
   std::vector<u8> buf(ram_ptr(addr), ram_ptr(addr) + size);
   s_dl_depth++;
