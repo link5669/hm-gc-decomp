@@ -1004,10 +1004,19 @@ bool read_xfb(std::vector<u8> &rgba, int &w, int &h) {
   w = s_xfb_w;
   h = s_xfb_h;
   rgba.resize((size_t)w * h * 4);
+  flush_batch();
+  GLint old_fb = 0, old_read_fb = 0, old_pack = 0;   // debug readback: leave GL state as we found it
+  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &old_fb);
+  glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &old_read_fb);
+  glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &old_pack);
+  glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, s_copy_fbo);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_xfb_tex, 0);
   glPixelStorei(GL_PACK_ALIGNMENT, 1);
   glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+  glBindBuffer(GL_PIXEL_PACK_BUFFER, old_pack);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, old_fb);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, old_read_fb);
   return true;
 }
 

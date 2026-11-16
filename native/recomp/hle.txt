@@ -33,3 +33,6 @@ replace fn_800D339C hle_CARDGetStatus
 replace fn_800D34B0 hle_CARDSetStatusAsync
 replace fn_800D3624 hle_CARDSetStatus
 replace fn_800D366C hle_CARDGetSerialNo
+after   fn_800D6668        hle_after_GXSetDrawDone  # GXSetDrawDone: wait for the GPU thread so draw-done is prompt
+after   fn_8016E088        hle_trace_ddcb      # game draw-done callback (debug trace, HM_DDTRACE)
+after   fn_8015B020        hle_trace_vicb      # game VI-retrace XFB copy callback (debug trace, HM_DDTRACE)

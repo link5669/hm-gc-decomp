@@ -6,6 +6,8 @@
 #include "../audio/audio.h"
 #include <ctime>
 #include <atomic>
+extern "C" volatile unsigned gpu_dbg_dd_seen;
+static u32 g_dd_calls;
 
 // ---------------- PI ----------------
 static u32 pi_lines;    // level-triggered device lines
@@ -61,12 +63,13 @@ static void pe_update_lines() {
 #include <mutex>
 #include <deque>
 static std::mutex g_gpu_ev_mu;
-static std::deque<u32> g_gpu_evq[2];   // [0] finish (0x8), [1] tokens (0x4 | token << 16); per kind, in order
+static std::deque<u32> g_gpu_evq;   // finish (0x8) and token (0x4 | token << 16) events, in stream order
 static std::atomic<int> g_gpu_evn{0};
 extern u32 g_vi_count;
 static struct { u32 vi, flag, x6c; } g_dd_trace[8]; static u32 g_dd_n;
 void hw_debug_dump() {
     for (u32 i = 0; i < 8; i++) { auto &t = g_dd_trace[(g_dd_n + i) & 7]; fprintf(stderr, "[hw] draw-done at vi %u: flag %u x6c %u\n", t.vi, t.flag, t.x6c); }
+    fprintf(stderr, "[hw] GXSetDrawDone calls %u, BP 0x45 seen by GPU %u\n", g_dd_calls, gpu_dbg_dd_seen);
     fprintf(stderr, "[hw] pi lines %X mask %X pe ctrl %04X token %04X gpu events queued %d cp1 %04X\n", pi_lines, pi_mask,
             pe_regs[5], pe_token, g_gpu_evn.load(), cp_regs[1]);
 }
@@ -74,11 +77,16 @@ void hw_apply_gpu_events() {
     if (!g_gpu_evn.load(std::memory_order_acquire)) return;
     std::lock_guard<std::mutex> l(g_gpu_ev_mu);
     bool changed = false;
-    for (auto &q : g_gpu_evq) while (!q.empty()) {
+    // One PE interrupt pending at a time, across both kinds: the SDK acknowledges with a read-modify-write of
+    // PE_CTRL (write 1 to clear), so a token ack would also clear a pending draw-done (and vice versa) and the
+    // game would wait forever for its draw-done callback. On hardware the two practically never coincide.
+    auto &q = g_gpu_evq;
+    while (!q.empty()) {
         u32 e = q.front();
         u32 bit = e & 0xC;
-        if (pe_regs[5] & bit) break;   // previous one of this kind not acknowledged yet
+        if (pe_regs[5] & 0xC) break;   // previous event not acknowledged yet
         if (bit == 4) pe_token = e >> 16;
+        if (bit == 8 && getenv("HM_DDTRACE")) { u32 a20 = ld32(0x8035AD20); fprintf(stderr, "[dd] apply vi %u flag %u x6c %d\n", g_vi_count, ld32(0x8035ACE8), a20 ? (int)ld32(a20 + 0x6C) : -1); }
         if (bit == 8) {   // debug trace: game draw-done state at delivery
             u32 ad20 = ld32(0x8035AD20);
             g_dd_trace[g_dd_n++ & 7] = {g_vi_count, ld32(0x8035ACE8), ad20 ? ld32(ad20 + 0x6C) : 0xFFFFFFFF};
@@ -91,15 +99,38 @@ void hw_apply_gpu_events() {
     if (changed) pe_update_lines();
 }
 static void gpu_event(u32 e) {
+    if ((e & 8) && getenv("HM_DDTRACE")) fprintf(stderr, "[dd] gpu event vi %u\n", g_vi_count);
     {
         std::lock_guard<std::mutex> l(g_gpu_ev_mu);
-        g_gpu_evq[(e & 4) ? 1 : 0].push_back(e);
+        g_gpu_evq.push_back(e);
         g_gpu_evn++;
     }
     ev_schedule(EV_GPU, 0);   // due now: wakes ev_wait_until_next
     rt_irq_flag = 1;
 }
 extern "C" void gpu_cb_draw_done(void) { gpu_event(8); }
+// After GXSetDrawDone: let the GPU thread catch up so the draw-done interrupt arrives about as promptly as on
+// hardware. The game's draw-done callback only advances its frame state if nothing else happened meanwhile.
+extern "C" void hle_trace_ddcb(CPU *RESTRICT c) {
+    static const bool t = getenv("HM_DDTRACE"); if (!t) return;
+    u32 a20 = ld32(0x8035AD20);
+    fprintf(stderr, "[dd] game ddcb vi %u -> flag %u x6c %d\n", g_vi_count, ld32(0x8035ACE8), a20 ? (int)ld32(a20 + 0x6C) : -1);
+}
+extern "C" void hle_trace_vicb(CPU *RESTRICT c) {
+    static const bool t = getenv("HM_DDTRACE"); if (!t) return;
+    static u32 last = 99; u32 f = ld32(0x8035ACE8);
+    if (f != last) fprintf(stderr, "[dd] game vicb vi %u -> flag %u\n", g_vi_count, f);
+    last = f;
+}
+extern "C" void hle_after_GXSetDrawDone(CPU *RESTRICT c) {
+    if (getenv("HM_DDTRACE")) fprintf(stderr, "[dd] SetDrawDone vi %u flag %u\n", g_vi_count, ld32(0x8035ACE8));
+    g_dd_calls++;
+    static const bool on = getenv("HM_DDSYNC") != nullptr;   // experimental: off by default
+    if (!on) return;
+    gp_flush();
+    gpu_sync();
+    hw_apply_gpu_events();
+}
 extern "C" void gpu_cb_token(uint16_t token) { gpu_event(4 | (u32)token << 16); }
 
 static u32 cp_read(u32 off) {

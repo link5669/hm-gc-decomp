@@ -128,6 +128,9 @@ class Gen:
         name = self.fname(entry)
         if entry in self.hle:
             return 'void %s(CPU *RESTRICT c) { %s(c); }\n' % (name, self.hle[entry])
+        after = self.after.get(entry)
+        if after:   # run the translated function, then a host hook
+            name = name + '_orig'
         out = ['void %s(CPU *RESTRICT c) {' % name, '  u32 ea; (void)ea; u64 t64; (void)t64; double fa, fb; (void)fa; (void)fb;']
         if entry != f.start:
             out.append('  goto L_%08X;' % entry)
@@ -136,6 +139,8 @@ class Gen:
             if pc in labels: out.append('L_%08X:;' % pc)
             out.append('  ' + code if code else '')
         out.append('}')
+        if after:
+            out.append('void %s(CPU *RESTRICT c) { %s(c); %s(c); }' % (self.fname(entry), name, after))
         return '\n'.join(x for x in out if x != '') + '\n'
 
     def gen_body(self, f):
@@ -570,7 +575,7 @@ def main():
     funcs = load_funcs(dol, a.syms, nocode)
     names = {}
     for f in funcs: names[f.name] = f.start
-    hle, save_ctx = {}, set()
+    hle, save_ctx, after = {}, set(), {}
     for line in open(a.hle):
         line = line.split('#')[0].split()
         if not line: continue
@@ -578,16 +583,18 @@ def main():
         addr = int(sym, 16) if re.fullmatch(r'[0-9A-Fa-f]{8}', sym) else names.get(sym)
         if addr is None: sys.exit('hle: unknown symbol %s' % sym)
         if kind == 'replace': hle[addr] = line[2]
+        elif kind == 'after': after[addr] = line[2]
         elif kind == 'savectx': save_ctx.add(addr)
     g = Gen(dol, funcs, hle)
     g.save_ctx = save_ctx
+    g.after = after
     g.scan_entries()
     os.makedirs(a.out, exist_ok=True)
     entries = g.all_entries()
     with open(os.path.join(a.out, 'funcs.h'), 'w') as fp:
         fp.write('#pragma once\n#include "ppc.h"\n')
         for e in entries: fp.write('void fn_%08X(CPU *RESTRICT c);\n' % e)
-        for v in sorted(set(hle.values())): fp.write('void %s(CPU *RESTRICT c);\n' % v)
+        for v in sorted(set(hle.values()) | set(after.values())): fp.write('void %s(CPU *RESTRICT c);\n' % v)
     n = 0; nf = 0
     chunk = []
     def flush():

@@ -10,6 +10,7 @@
 #include "../gpu/tools/png.h"
 #include <string>
 #include <vector>
+#include <thread>
 #include <algorithm>
 #include <atomic>
 
@@ -129,7 +130,10 @@ static void present_on_gpu(const PresentReq &q) {
         uint8_t *px; int pw, ph;
         if (gpu_frame && gpu_debug_read_xfb(&px, &pw, &ph)) {
             char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, q.vi);
-            pngw::write_png(path, px, pw, ph);
+            // encode/write on a helper thread: a large PNG would stall the GPU thread for ~100 ms
+            std::vector<u8> copy(px, px + (size_t)pw * ph * 4);
+            std::string ps(path);
+            std::thread([ps, pw, ph, copy = std::move(copy)]() { pngw::write_png(ps.c_str(), copy.data(), pw, ph); }).detach();
         } else if (!gpu_frame) {   // CPU XFB: convert here for the screenshot
             std::vector<u8> rgba((size_t)w * h * 4);
             for (int y = 0; y < h; y++) for (int x = 0; x < w; x += 2) {
@@ -205,7 +209,7 @@ static std::string find_disc(int argc, char **argv) {
 static void dump_guest(int) {
     CPU *c = &g_cpu; u32 off;
     void hw_debug_dump(); hw_debug_dump();
-    fprintf(stderr, "[guest] 8035ACE8=%d inflight=%d\n", (int)ld32(0x8035ACE8), g_present_inflight.load());
+    fprintf(stderr, "[guest] 8035ACE8=%d inflight=%d vi=%u shown=%u ramframes=%u\n", (int)ld32(0x8035ACE8), g_present_inflight.load(), g_vi_count, g_frames_shown.load(), g_ram_frames);
     fprintf(stderr, "[guest] lr=%08X (%s+0x%X) r1=%08X r3=%08X msr=%08X ctx=%08X\n", c->lr, rt_func_name(c->lr, &off), off, c->r[1], c->r[3], c->msr, ld32(0x800000D4));
     u32 sp = c->r[1];
     for (int i = 0; i < 20 && ISRAM(sp) && sp; i++) {

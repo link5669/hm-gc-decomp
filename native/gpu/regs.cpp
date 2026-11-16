@@ -1,6 +1,7 @@
 // CP / XF / BP register writes.
 #include "gx_internal.h"
 
+extern "C" { volatile unsigned gpu_dbg_dd_seen; }
 namespace gx {
 
 CPRegs cp;
@@ -66,6 +67,7 @@ void bp_write(u8 reg, u32 val) {
   switch (reg) {
     case 0x45:
       flush_batch();
+      gpu_dbg_dd_seen++;
       gpu_cb_draw_done();
       break;
     case 0x47: break;
