@@ -87,7 +87,9 @@ void present_vi_frame(u32 xfb, int w, int h) {
     static u32 total; total++;
     static const char *shotdir = getenv("HM_SHOTDIR");
     static int every = getenv("HM_SHOTEVERY") ? atoi(getenv("HM_SHOTEVERY")) : 60;
-    if (shotdir && total % every == 0) {
+    extern volatile bool g_shot_request;
+    bool req = g_shot_request; g_shot_request = false;
+    if (shotdir && (total % every == 0 || req)) {
         uint8_t *px; int pw, ph;
         if (gpu_frame && gpu_debug_read_xfb(&px, &pw, &ph)) {
             char path[512]; snprintf(path, sizeof path, "%s/f%05u.png", shotdir, g_vi_count);

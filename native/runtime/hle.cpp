@@ -156,7 +156,8 @@ void pad_device_event(const SDL_Event &e) {
 static u32 g_autopress_frame;
 extern u32 g_vi_count;
 // HM_SCRIPT="300:A 420:A 600:S 700:D*30" : at PADRead call N press buttons (A B X Y Z S=start U D L R; *n = hold n reads, default 4)
-struct ScriptEv { u32 f, hold; u16 b; int pad; s8 sx, sy; int anchor; };
+struct ScriptEv { u32 f, hold; u16 b; int pad; s8 sx, sy; int anchor; bool shot; };
+volatile bool g_shot_request;
 // anchors: "@text" waits until OSReport output contains text; following "+N:..." events are relative to it
 static std::vector<std::string> g_anchor_text;
 static std::vector<u32> g_anchor_frame;   // 0 = not reached yet
@@ -191,15 +192,15 @@ static u16 script_buttons(u32 frame, int pad) {
             int pad = 0;
             if (*s == 'p' && s[1] >= '1' && s[1] <= '4' && s[2] == ':') { pad = s[1] - '1'; s += 3; }
             g_script_pad[pad] = true;
-            u16 b = 0; u32 hold = 4; s8 sx = 0, sy = 0;
+            u16 b = 0; u32 hold = 4; s8 sx = 0, sy = 0; bool shot = false;
             while (*s && *s != ' ' && *s != ',' && *s != '*') {
-                switch (*s) { case '^': sy = 100; break; case 'v': sy = -100; break; case '<': sx = -100; break; case '>': sx = 100; break; case 'A': b |= B_A; break; case 'B': b |= B_B; break; case 'X': b |= B_X; break; case 'Y': b |= B_Y; break;
+                switch (*s) { case 'P': shot = true; break; case '^': sy = 100; break; case 'v': sy = -100; break; case '<': sx = -100; break; case '>': sx = 100; break; case 'A': b |= B_A; break; case 'B': b |= B_B; break; case 'X': b |= B_X; break; case 'Y': b |= B_Y; break;
                 case 'Z': b |= B_Z; break; case 'S': b |= B_START; break; case 'U': b |= B_UP; break; case 'D': b |= B_DOWN; break;
                 case 'L': b |= B_LEFT; break; case 'R': b |= B_RIGHT; break; }
                 s++;
             }
             if (*s == '*') { s++; hold = strtoul(s, (char **)&s, 10); }
-            ev.push_back({f, hold, b, pad, sx, sy, anchor});
+            ev.push_back({f, shot ? 1 : hold, b, pad, sx, sy, anchor, shot});
         }
     }
     u16 b = 0;
@@ -208,7 +209,7 @@ static u16 script_buttons(u32 frame, int pad) {
         if (e.pad != pad) continue;
         u32 f0 = e.f;
         if (e.anchor >= 0) { if (!g_anchor_frame[e.anchor]) continue; f0 += g_anchor_frame[e.anchor]; }
-        if (!(frame >= f0 && frame < f0 + e.hold)) continue; b |= e.b; if (e.sx) g_script_sx[pad] = e.sx; if (e.sy) g_script_sy[pad] = e.sy; }
+        if (!(frame >= f0 && frame < f0 + e.hold)) continue; if (e.shot) g_shot_request = true; b |= e.b; if (e.sx) g_script_sx[pad] = e.sx; if (e.sy) g_script_sy[pad] = e.sy; }
     if (b && getenv("HM_SCRIPT_LOG")) LOG("[script] frame %u buttons %04X\n", frame, b);
     return b;
 }
