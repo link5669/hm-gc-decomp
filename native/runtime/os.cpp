@@ -162,7 +162,9 @@ static void deliver(CPU *c, int exc) {
 }
 
 extern "C" void rt_card_run_pending(CPU *RESTRICT c);
+void gp_flush();
 extern "C" void rt_irq_check(CPU *RESTRICT c) {
+    gp_flush();   // commands still in the gather buffer (e.g. a draw-done the CPU is now waiting for)
     for (;;) {
         rt_irq_flag = 0;
         ev_run_due();

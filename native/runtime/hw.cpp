@@ -26,7 +26,7 @@ static u16 pe_token;
 static u8 gp_buf[256]; static u32 gp_len;
 
 static bool cp_linked() { return (cp_regs[1] & 0x11) == 0x11; }   // GP read enable + GP link enable
-static void gp_flush() {
+void gp_flush() {
     if (!gp_len) return;
     u32 n = gp_len; gp_len = 0;
     gpu_fifo_write(gp_buf, n);
@@ -45,7 +45,7 @@ void gp_write(u32 v, int size) {
     }
     if (cp_linked()) {
         memcpy(gp_buf + gp_len, b, size); gp_len += size;
-        if (gp_len >= 128) gp_flush();
+        if (gp_len >= 32) gp_flush();   // the hardware gather pipe bursts every 32 bytes
     }
 }
 static void pe_update_lines() {

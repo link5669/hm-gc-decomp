@@ -19,7 +19,9 @@ file(GLOB GEN_SRC ${HM_GEN_DIR}/gen_*.c)
 add_library(hmgen STATIC ${GEN_SRC} ${HM_GEN_DIR}/table.c)
 target_include_directories(hmgen PRIVATE ${HM_GEN_DIR} runtime)
 # guest integer arithmetic wraps; no FP contraction beyond what the guest code asked for
-target_compile_options(hmgen PRIVATE -O2 -fwrapv -ffp-contract=off -fno-math-errno -w)
+set(HM_GEN_OPT "-O2" CACHE STRING "optimization flags for the recompiled code")
+separate_arguments(HM_GEN_OPT_LIST UNIX_COMMAND "${HM_GEN_OPT}")
+target_compile_options(hmgen PRIVATE ${HM_GEN_OPT_LIST} -fwrapv -ffp-contract=off -fno-math-errno -w)
 
 configure_file(runtime/dol.S.in ${CMAKE_BINARY_DIR}/dol.S @ONLY)
 set(RT_SRC runtime/main.cpp runtime/cpu.cpp runtime/os.cpp runtime/hw.cpp runtime/events.cpp
