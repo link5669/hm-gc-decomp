@@ -163,7 +163,14 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    int scale = getenv("HM_SCALE") ? atoi(getenv("HM_SCALE")) : 2;
+    int scale = 2;
+    if (getenv("HM_SCALE")) scale = atoi(getenv("HM_SCALE"));
+    else {   // auto: render at least at the monitor's native height (supersampled when above it)
+        SDL_DisplayMode dm;
+        if (SDL_GetDesktopDisplayMode(0, &dm) == 0 && dm.h > 0) scale = (dm.h + 479) / 480;
+        if (scale < 2) scale = 2;
+        if (scale > 6) scale = 6;
+    }
     g_win = SDL_CreateWindow("The Haunted Mansion", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720,
                              SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (getenv("HM_HIDDEN") ? SDL_WINDOW_HIDDEN : 0));
     if (!g_win) { fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError()); return 1; }

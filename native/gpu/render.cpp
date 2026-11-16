@@ -22,6 +22,7 @@ static unsigned s_xfb_tex;
 // ---- widescreen ----
 // Physical EFB width W = 640*scale*aspect/(4/3); logical EFB x maps linearly to physical x.
 static float s_aspect = 4.0f / 3.0f, s_pending_aspect = 4.0f / 3.0f, s_xfb_aspect = 4.0f / 3.0f;
+static float s_aniso = 1;
 static bool wide() { return W != EFB_W * g_scale; }
 static int PX(int x) { return wide() ? (int)((long long)x * W / EFB_W) : x * g_scale; }
 static float XS() { return (float)W / EFB_W; }  // host pixels per logical x
@@ -225,6 +226,14 @@ bool render_init(int scale) {
 #undef OFF
   glGenVertexArrays(1, &s_empty_vao);
   glGenSamplers(8, s_samplers);
+  {  // anisotropic filtering (GL 4.6 core / EXT_texture_filter_anisotropic): sharper textures at grazing angles
+    float mx = 0;
+    while (glGetError()) {}
+    glGetFloatv(0x84FF /*MAX_TEXTURE_MAX_ANISOTROPY*/, &mx);
+    if (glGetError() || mx < 1) mx = 1;
+    const char *e = getenv("HM_ANISO");
+    s_aniso = e ? std::max(1.0f, std::min(mx, (float)atof(e))) : std::min(mx, 16.0f);
+  }
   s_copy_prog = build_simple(s_fullscreen_vs, s_copy_fs);
   s_present_prog = build_simple(s_fullscreen_vs, s_present_fs);
   s_yuyv_prog = build_simple(s_fullscreen_vs, s_yuyv_fs);
@@ -521,6 +530,7 @@ void flush_batch() {
     glSamplerParameteri(s, GL_TEXTURE_WRAP_T, b_tex[n].wrap_t);
     glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER, b_tex[n].minf);
     glSamplerParameteri(s, GL_TEXTURE_MAG_FILTER, b_tex[n].magf);
+    if (s_aniso > 1) glSamplerParameterf(s, 0x84FE /*TEXTURE_MAX_ANISOTROPY*/, b_tex[n].minf == GL_NEAREST ? 1.0f : s_aniso);
     glSamplerParameterf(s, GL_TEXTURE_LOD_BIAS, b_tex[n].bias + (g_scale > 1 ? std::log2((float)g_scale) * 0 : 0));
     glSamplerParameterf(s, GL_TEXTURE_MIN_LOD, b_tex[n].minlod);
     glSamplerParameterf(s, GL_TEXTURE_MAX_LOD, b_tex[n].maxlod);

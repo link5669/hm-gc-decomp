@@ -140,8 +140,11 @@ void pad_device_event(const SDL_Event &e) {
 static u32 g_autopress_frame;
 extern u32 g_vi_count;
 // HM_SCRIPT="300:A 420:A 600:S 700:D*30" : at PADRead call N press buttons (A B X Y Z S=start U D L R; *n = hold n reads, default 4)
-static u16 script_buttons(u32 frame) {
-    static std::vector<std::pair<u32, std::pair<u32, u16>>> ev; static bool parsed;
+struct ScriptEv { u32 f, hold; u16 b; int pad; s8 sx, sy; };
+static s8 g_script_sx[4], g_script_sy[4];
+static bool g_script_pad[4];
+static u16 script_buttons(u32 frame, int pad) {
+    static std::vector<ScriptEv> ev; static bool parsed;
     if (!parsed) {
         parsed = true;
         const char *s = getenv("HM_SCRIPT");
@@ -149,19 +152,23 @@ static u16 script_buttons(u32 frame) {
             while (*s == ' ' || *s == ',') s++;
             if (!*s) break;
             u32 f = strtoul(s, (char **)&s, 10); if (*s == ':') s++;
-            u16 b = 0; u32 hold = 4;
+            int pad = 0;
+            if (*s == 'p' && s[1] >= '1' && s[1] <= '4' && s[2] == ':') { pad = s[1] - '1'; s += 3; }
+            g_script_pad[pad] = true;
+            u16 b = 0; u32 hold = 4; s8 sx = 0, sy = 0;
             while (*s && *s != ' ' && *s != ',' && *s != '*') {
-                switch (*s) { case 'A': b |= B_A; break; case 'B': b |= B_B; break; case 'X': b |= B_X; break; case 'Y': b |= B_Y; break;
+                switch (*s) { case '^': sy = 100; break; case 'v': sy = -100; break; case '<': sx = -100; break; case '>': sx = 100; break; case 'A': b |= B_A; break; case 'B': b |= B_B; break; case 'X': b |= B_X; break; case 'Y': b |= B_Y; break;
                 case 'Z': b |= B_Z; break; case 'S': b |= B_START; break; case 'U': b |= B_UP; break; case 'D': b |= B_DOWN; break;
                 case 'L': b |= B_LEFT; break; case 'R': b |= B_RIGHT; break; }
                 s++;
             }
             if (*s == '*') { s++; hold = strtoul(s, (char **)&s, 10); }
-            ev.push_back({f, {hold, b}});
+            ev.push_back({f, hold, b, pad, sx, sy});
         }
     }
     u16 b = 0;
-    for (auto &e : ev) if (frame >= e.first && frame < e.first + e.second.first) b |= e.second.second;
+    g_script_sx[pad] = g_script_sy[pad] = 0;
+    for (auto &e : ev) if (e.pad == pad && frame >= e.f && frame < e.f + e.hold) { b |= e.b; if (e.sx) g_script_sx[pad] = e.sx; if (e.sy) g_script_sy[pad] = e.sy; }
     if (b && getenv("HM_SCRIPT_LOG")) LOG("[script] frame %u buttons %04X\n", frame, b);
     return b;
 }
@@ -172,14 +179,15 @@ extern "C" void hle_PADRead(CPU *RESTRICT c) {
     for (int i = 0; i < 4; i++, st += 12) {
         PadState &p = g_pads[i];
         for (int b = 0; b < 12; b++) st8(st + b, 0);
+        if (i > 0 && !p.connected) { script_buttons(g_vi_count, i); if (g_script_pad[i]) p.connected = true; }
         if (!p.connected) { st8(st + 10, (u8)-1); continue; }
         u16 buttons = p.buttons;
-        if (i == 0) buttons |= script_buttons(g_vi_count);
+        buttons |= script_buttons(g_vi_count, i);
         if (const char *ap = getenv("HM_AUTOSTART")) {  // press Start periodically (testing)
             int every = atoi(ap); if (every > 0 && i == 0 && (g_autopress_frame % every) < 3) buttons |= B_START;
         }
         st16(st + 0, buttons);
-        st8(st + 2, (u8)p.sx); st8(st + 3, (u8)p.sy); st8(st + 4, (u8)p.cx); st8(st + 5, (u8)p.cy);
+        st8(st + 2, (u8)(g_script_sx[i] ? g_script_sx[i] : p.sx)); st8(st + 3, (u8)(g_script_sy[i] ? g_script_sy[i] : p.sy)); st8(st + 4, (u8)p.cx); st8(st + 5, (u8)p.cy);
         st8(st + 6, p.tl); st8(st + 7, p.tr);
         st8(st + 10, 0);
         motor |= 0x80000000u >> i;

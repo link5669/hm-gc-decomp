@@ -6,6 +6,7 @@
   X(PFNGLGETERRORPROC, GetError)                                                       \
   X(PFNGLGETSTRINGPROC, GetString)                                                     \
   X(PFNGLGETINTEGERVPROC, GetIntegerv)                                                 \
+  X(PFNGLGETFLOATVPROC, GetFloatv)                                                     \
   X(PFNGLENABLEPROC, Enable)                                                           \
   X(PFNGLDISABLEPROC, Disable)                                                         \
   X(PFNGLVIEWPORTPROC, Viewport)                                                       \
@@ -81,6 +82,7 @@ HMGL_FUNCS(HMGL_DECL)
 #define glGetError hgl_GetError
 #define glGetString hgl_GetString
 #define glGetIntegerv hgl_GetIntegerv
+#define glGetFloatv hgl_GetFloatv
 #define glEnable hgl_Enable
 #define glDisable hgl_Disable
 #define glViewport hgl_Viewport
