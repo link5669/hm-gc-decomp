@@ -23,7 +23,8 @@ target_compile_options(hmgen PRIVATE -O2 -fwrapv -ffp-contract=off -fno-math-err
 
 configure_file(runtime/dol.S.in ${CMAKE_BINARY_DIR}/dol.S @ONLY)
 set(RT_SRC runtime/main.cpp runtime/cpu.cpp runtime/os.cpp runtime/hw.cpp runtime/events.cpp
-           runtime/boot.cpp runtime/hle.cpp runtime/card.cpp ${CMAKE_BINARY_DIR}/dol.S)
+           runtime/boot.cpp runtime/hle.cpp runtime/card.cpp ${CMAKE_BINARY_DIR}/dol.S
+           net/proto.cpp net/host.cpp net/client.cpp net/stb_impl.cpp)   # net/: online co-op
 set(HM_LIBS)
 if(HM_WITH_GPU AND EXISTS ${CMAKE_SOURCE_DIR}/gpu/CMakeLists.txt)
   add_subdirectory(gpu)

@@ -8,6 +8,7 @@ static u16 dsp_regs[0x100];
 static u32 ai_regs[8];
 W void audio_init(uint8_t *) {}
 W void audio_shutdown(void) {}
+W void audio_set_capture(void (*)(const int16_t *, int, int)) {}   // [net]
 // bring-up DSP: init ucode replies 0x80544348; DMA/reset complete instantly; mailboxes always empty
 static bool mail_full = false;
 W uint16_t audio_dsp_read16(uint32_t off) {

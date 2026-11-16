@@ -2,6 +2,7 @@
 #include "rt.h"
 #include "../gpu/gpu.h"
 #include "../audio/audio.h"
+#include "../net/net.h"   // [net] online co-op
 #include <SDL.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -79,6 +80,7 @@ void present_vi_frame(u32 xfb, int w, int h) {
     if (gpu_frame) gpu_present(ww, wh);
     else if (xfb && w > 0 && h > 0) gpu_present_ram_xfb(xfb, w, h, w, ww, wh);
     else return;
+    net_capture_frame(ww, wh);   // [net] stream this frame to a connected guest
     last_serial = g_copy_serial; last_addr = xfb;
     SDL_GL_SwapWindow(g_win);
     g_frames++;
@@ -108,7 +110,7 @@ void present_vi_frame(u32 xfb, int w, int h) {
     }
     u64 now = SDL_GetTicks64();
     if (now - g_fps_t0 >= 1000) {
-        char t[96]; snprintf(t, sizeof t, "The Haunted Mansion  (%u fps)", (unsigned)(g_frames * 1000 / (now - g_fps_t0)));
+        char t[256]; snprintf(t, sizeof t, "The Haunted Mansion  (%u fps)  %s", (unsigned)(g_frames * 1000 / (now - g_fps_t0)), net_status());   // [net] status
         SDL_SetWindowTitle(g_win, t);
         if (getenv("HM_FPS")) LOG("%s\n", t);
         g_frames = 0; g_fps_t0 = now;
@@ -146,6 +148,8 @@ int main(int argc, char **argv) {
     void *ram = mmap(RAM, 0x02000000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
     if (ram != RAM) { fprintf(stderr, "cannot map guest RAM at %p\n", RAM); return 1; }
 
+    int net_mode = net_parse_args(&argc, argv);   // [net] --host/--join/--relay/--room
+    if (net_mode == 2) return net_client_main();  // [net] guest: thin client, no disc
     std::string disc = find_disc(argc, argv);
     if (disc.empty() || !disc_open(disc)) {
         const char *msg = "Put your copy of the game (GHYE6S disc image, .iso) at ~/.local/share/hauntedmansion/game.iso,\n"
@@ -197,6 +201,8 @@ int main(int argc, char **argv) {
     gpu_set_scale(scale);
     gpu_init(RAM, 0x01800000);
     audio_init(RAM);
+    audio_set_capture(net_audio_capture);   // [net]
+    net_host_start();                       // [net]
     hw_init();
     os_init_main_fiber();
     ev_start_timer_thread();

@@ -105,8 +105,13 @@ void out_close() {
   O = Output();
 }
 
+// [net] output capture for online co-op (audio_set_capture)
+static void (*g_capture)(const int16_t *, int, int);
+extern "C" void audio_set_capture(void (*cb)(const int16_t *, int, int)) { g_capture = cb; }
+
 // frames: interleaved host-endian L R
 void out_push(const int16_t *lr, int frames, uint32_t rate) {
+  if (g_capture) g_capture(lr, frames, (int)rate);   // [net]
   if (O.wav) {
     if (!O.wav_rate) O.wav_rate = rate;
     for (int i = 0; i < frames * 2; i++) {

@@ -53,3 +53,41 @@ F11 or Alt+Enter toggles fullscreen.
 Environment: HM_SCALE (internal resolution, default 2), HM_FULLSCREEN, HM_FPS, HM_REPORT (game's OSReport output),
 HM_LOG=2 (verbose), HM_SHOTDIR/HM_SHOTEVERY (screenshots), HM_SCRIPT (scripted pad input at VI frame numbers,
 e.g. "300:S 900:A*8"), SIGUSR1 prints the guest call stack.
+
+## Online co-op
+Host-authoritative remote play (code in `net/`): the host runs the game and streams video (JPEG) and audio
+(IMA-ADPCM, 32 kHz stereo) over TCP; the guest is a thin client (no disc needed) whose controller drives
+player 2 (pad 2). While a guest is connected its input replaces controller 2; when it leaves, pad 2 goes
+back to the local controller / unplugged (the mod then drops player 2). Player 2 joins by pressing Start in gameplay.
+
+- Direct: host `hauntedmansion [disc.iso] --host [port]` (default 7777, forward that TCP port);
+  guest `hauntedmansion --join HOST[:PORT]`. Optional shared code: `--room CODE` on both (or HM_NET_ROOM).
+- Via a relay (no port forwarding): host `hauntedmansion --host --relay RELAY:7778 [--room CODE]`
+  (prints the room code; random 6 characters if none given); guest `hauntedmansion --relay RELAY:7778 --room CODE`.
+  (`--relay` with `--room` and without `--host` means guest.)
+- Guest keys/controller: the player-1 mapping above. F11 / Alt+Enter fullscreen. `--name NAME` (or HM_NET_NAME).
+- Status: host window title shows "guest connected (name, RTT)"; both sides log `[net]` stats every 5 s.
+- Host tuning: HM_NET_W / HM_NET_H (stream size, default 960 x window aspect), HM_NET_QUALITY (JPEG, default 65),
+  HM_NET_FPS (max stream fps, default 30), HM_NET_MAXQ (KB of unsent socket data before frames are dropped, default 192).
+  Guest: HM_NET_AUDIO_MS (audio jitter buffer, default 60), HM_NET_SCRIPT (test input: "ms:BUTTONS*hold_ms ...",
+  e.g. "95000:S*150").
+- Bandwidth at defaults: about 4-7 Mbit/s video + 0.27 Mbit/s audio host->guest, ~10 kbit/s guest->host.
+
+Protocol: u32 length + u8 type + payload; HELLO (magic, version, role, room, name), INPUT, VIDEO, AUDIO,
+PING/PONG, BYE (see `net/proto.h`). The relay speaks a one-line preamble first (`HMRELAY HOST|JOIN CODE`).
+
+### Relay server
+`net/relay/hm_relay.py` (Python 3.7+, no dependencies) pairs hosts and guests by room code and pipes bytes.
+On any VPS: `python3 hm_relay.py --port 7778` (open TCP 7778). Options: `--idle 120` (seconds without data
+before a session is closed), `--wait 3600` (how long a host may wait for a guest). systemd unit example
+(`/etc/systemd/system/hm-relay.service`, then `systemctl enable --now hm-relay`):
+
+    [Unit]
+    Description=Haunted Mansion co-op relay
+    After=network-online.target
+    [Service]
+    ExecStart=/usr/bin/python3 /opt/hm/hm_relay.py --port 7778
+    DynamicUser=yes
+    Restart=always
+    [Install]
+    WantedBy=multi-user.target

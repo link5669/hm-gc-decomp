@@ -3,6 +3,7 @@
 #include <SDL.h>
 #include <string>
 #include <vector>
+#include "../net/net.h"   // [net] online co-op
 
 // ---- guest printf ----
 static std::string guest_format(CPU *c, u32 fmt, int first_gpr) {
@@ -42,8 +43,14 @@ static std::string guest_format(CPU *c, u32 fmt, int first_gpr) {
     return out;
 }
 static bool g_report = getenv("HM_REPORT") != nullptr;
+static void script_report(const std::string &line);
+static bool g_script_anchors = getenv("HM_SCRIPT") && strchr(getenv("HM_SCRIPT"), '@');
 extern "C" void hle_OSReport(CPU *RESTRICT c) {
-    if (g_report) { std::string s = guest_format(c, c->r[3], 4); fputs(s.c_str(), stderr); }
+    if (g_report || g_script_anchors) {
+        std::string s = guest_format(c, c->r[3], 4);
+        if (g_report) fputs(s.c_str(), stderr);
+        if (g_script_anchors) script_report(s);
+    }
 }
 extern "C" void hle_OSPanic(CPU *RESTRICT c) {
     std::string s = guest_format(c, c->r[5], 6);
@@ -128,6 +135,15 @@ void pad_poll_host() {
         if (bt(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) q.buttons |= B_RIGHT;
     }
     // test hook: HM_AUTOPRESS=frames:mask,... (debug only)
+    NetPad np;   // [net] online co-op: a connected remote guest drives player 2
+    if (net_remote_pad(&np)) g_pads[1] = {np.buttons, np.sx, np.sy, np.cx, np.cy, np.tl, np.tr, true};
+}
+// [net] guest mode: player 1's local mapping, sent as the remote player's pad
+bool pad_local_p1(NetPad *out) {
+    pad_poll_host();
+    const PadState &p = g_pads[0];
+    *out = {p.buttons, p.sx, p.sy, p.cx, p.cy, p.tl, p.tr};
+    return true;
 }
 
 void pad_device_event(const SDL_Event &e) {
@@ -140,7 +156,19 @@ void pad_device_event(const SDL_Event &e) {
 static u32 g_autopress_frame;
 extern u32 g_vi_count;
 // HM_SCRIPT="300:A 420:A 600:S 700:D*30" : at PADRead call N press buttons (A B X Y Z S=start U D L R; *n = hold n reads, default 4)
-struct ScriptEv { u32 f, hold; u16 b; int pad; s8 sx, sy; };
+struct ScriptEv { u32 f, hold; u16 b; int pad; s8 sx, sy; int anchor; };
+// anchors: "@text" waits until OSReport output contains text; following "+N:..." events are relative to it
+static std::vector<std::string> g_anchor_text;
+static std::vector<u32> g_anchor_frame;   // 0 = not reached yet
+static size_t g_anchor_next;
+extern u32 g_vi_count;
+static void script_report(const std::string &line) {
+    if (g_anchor_next < g_anchor_text.size() && line.find(g_anchor_text[g_anchor_next]) != std::string::npos) {
+        g_anchor_frame[g_anchor_next] = g_vi_count ? g_vi_count : 1;
+        if (getenv("HM_SCRIPT_LOG")) LOG("[script] anchor '%s' at frame %u\n", g_anchor_text[g_anchor_next].c_str(), g_vi_count);
+        g_anchor_next++;
+    }
+}
 static s8 g_script_sx[4], g_script_sy[4];
 static bool g_script_pad[4];
 static u16 script_buttons(u32 frame, int pad) {
@@ -151,6 +179,14 @@ static u16 script_buttons(u32 frame, int pad) {
         while (s && *s) {
             while (*s == ' ' || *s == ',') s++;
             if (!*s) break;
+            if (*s == '@') {
+                const char *e = s + 1; while (*e && *e != ' ' && *e != ',') e++;
+                std::string t(s + 1, e - s - 1);
+                for (auto &ch : t) if (ch == '_') ch = ' ';
+                g_anchor_text.push_back(t); g_anchor_frame.push_back(0); s = e; continue;
+            }
+            int anchor = -1;
+            if (*s == '+') { s++; anchor = (int)g_anchor_text.size() - 1; }
             u32 f = strtoul(s, (char **)&s, 10); if (*s == ':') s++;
             int pad = 0;
             if (*s == 'p' && s[1] >= '1' && s[1] <= '4' && s[2] == ':') { pad = s[1] - '1'; s += 3; }
@@ -163,12 +199,16 @@ static u16 script_buttons(u32 frame, int pad) {
                 s++;
             }
             if (*s == '*') { s++; hold = strtoul(s, (char **)&s, 10); }
-            ev.push_back({f, hold, b, pad, sx, sy});
+            ev.push_back({f, hold, b, pad, sx, sy, anchor});
         }
     }
     u16 b = 0;
     g_script_sx[pad] = g_script_sy[pad] = 0;
-    for (auto &e : ev) if (e.pad == pad && frame >= e.f && frame < e.f + e.hold) { b |= e.b; if (e.sx) g_script_sx[pad] = e.sx; if (e.sy) g_script_sy[pad] = e.sy; }
+    for (auto &e : ev) {
+        if (e.pad != pad) continue;
+        u32 f0 = e.f;
+        if (e.anchor >= 0) { if (!g_anchor_frame[e.anchor]) continue; f0 += g_anchor_frame[e.anchor]; }
+        if (!(frame >= f0 && frame < f0 + e.hold)) continue; b |= e.b; if (e.sx) g_script_sx[pad] = e.sx; if (e.sy) g_script_sy[pad] = e.sy; }
     if (b && getenv("HM_SCRIPT_LOG")) LOG("[script] frame %u buttons %04X\n", frame, b);
     return b;
 }

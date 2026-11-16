@@ -18,6 +18,9 @@ void audio_dsp_write16(uint32_t off, uint16_t v);
 uint32_t audio_ai_read32(uint32_t off);
 void audio_ai_write32(uint32_t off, uint32_t v);
 
+// [net] capture hook: called with every block of mixed output (interleaved L R, host endian), even when muted.
+void audio_set_capture(void (*cb)(const int16_t *lr, int frames, int rate));
+
 // Called by the runtime (on the guest CPU thread) when a deadline requested with rt_schedule passes.
 void audio_event(uint64_t now_tb);
 
