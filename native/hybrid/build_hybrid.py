@@ -75,6 +75,13 @@ def main():
     if not os.path.exists(hmrt): sys.exit('hmrt failed')
     # symbols, entries, deny
     db = symdb.SymDB(os.path.join(B, 'main.elf'), os.path.join(B, 'mp/mp.elf'))
+    # fixed-address declarations (SDK headers: `x AT_ADDRESS(0x...)`, which clang ignores) -> extra global symbols
+    for d in ['include', 'tools/rea/ref/dolsdk2004/include', 'build/GHYE6S/include', 'src']:
+        for dp, _, fs in os.walk(os.path.join(R, d)):
+            for fn in fs:
+                if not fn.endswith(('.h', '.c', '.cpp', '.hpp')): continue
+                for m in re.finditer(r'(\w+)\s*(?:\[[^]]*\])?\s+AT_ADDRESS\(\s*(0x[0-9A-Fa-f]+)\s*\)', open(os.path.join(dp, fn), errors='replace').read()):
+                    db.glob.setdefault(m.group(1), (int(m.group(2), 16), 0, 'OBJECT'))
     gsyms = os.path.join(W, 'globals.syms'); db.write_globals(gsyms + '.tmp'); write_if_changed(gsyms, open(gsyms + '.tmp').read())
     nm = os.path.join(O, 'main.nm'); mpnm = os.path.join(O, 'mp.nm')
     open(nm, 'w').write(run([BU + 'nm', '-S', '--defined-only', os.path.join(B, 'main.elf')]).stdout)
@@ -128,20 +135,24 @@ def main():
             elif l: units.append(l)
     else: units = allu
     units = [u for u in dict.fromkeys(units) if os.path.exists(os.path.join(IR, u + '.ll'))]
+    import asmfuncs   # functions with MWCC inline asm (clang drops #ifdef __MWERKS__ asm bodies silently)
+    asmf = os.path.join(W, 'asmfuncs.txt')
+    write_if_changed(asmf, '\n'.join(sorted(asmfuncs.collect([os.path.join(R, d) for d in ['src', 'include', 'tools/rea/ref/dolsdk2004/include', 'build/GHYE6S/include']]))) + '\n')
+    skipped_asm = []
     uid = lambda u: re.sub(r'\W', '_', u)
-    deps = [so, hmrt, entries, deny, gsyms]
+    deps = [so, hmrt, entries, deny, gsyms, asmf]
     def fresh(u, out):
         return all(newer(out, x) for x in deps + [os.path.join(IR, u + '.ll')])
     def pass_run(u, base, measure=False):
         d = os.path.join(W, uid(u))
         if measure and fresh(u, d + '.meta'): return None
-        env = dict(os.environ, GM_SYMS=gsyms + ':' + d + '.syms', GM_ENTRIES=entries, GM_DENY=deny, GM_HOST=hostf, GM_NOCALL=nocallf,
+        env = dict(os.environ, GM_SYMS=gsyms + ':' + d + '.syms', GM_ENTRIES=entries, GM_DENY=deny, GM_HOST=hostf, GM_NOCALL=nocallf, GM_ASMFN=asmf,
                    GM_DATA='%08X' % base, GM_UNIT=uid(u), GM_META=d + '.meta')
         if not os.path.exists(d + '.syms'): db.write_unit(os.path.basename(u), d + '.syms')
         r = run([LLVM + 'opt', '-load-pass-plugin=' + so, '-passes=guestmem', os.path.join(IR, u + '.ll'), '-o', d + '.pass.bc'], env=env)
         if r.returncode: return 'pass crashed: ' + (r.stderr.strip().splitlines() or ['?'])[0][:200]
         return None
-    print('units: %d, deny: %d addresses (%d mod-patched)' % (len(units), len(daddr), patched))
+    print('units: %d (+%d with inline asm skipped), deny: %d addresses (%d mod-patched)' % (len(units), len(skipped_asm), len(daddr), patched))
     # step 1: measure the private data each unit needs; step 2: place it and translate for real
     with ThreadPoolExecutor(j) as ex: errs = dict(zip(units, ex.map(lambda u: pass_run(u, DATA_BASE, True), units)))
     bases = {}; cur = DATA_BASE
@@ -198,7 +209,10 @@ def main():
         for ad in nat_sorted: f.write('0x%08X,\n' % ad)
         f.write('0};\nunsigned char hm_native_off[NNAT + 1];\n'
                 '// HM_NATIVE_DENY="lo-hi,addr,..." (hex): those functions run recompiled; HM_NATIVE_ONLY: everything else does\n'
+                '// a value "@file" reads the list from that file\n'
                 'static void parse(const char *e, unsigned char v) {\n'
+                '  static char buf[1 << 20];\n'
+                '  if (e && *e == \'@\') { FILE *f = fopen(e + 1, "r"); if (!f) return; size_t n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f); e = buf; }\n'
                 '  while (e && *e) { char *x; unsigned lo = strtoul(e, &x, 16), hi = lo + 1; if (x == e) { e++; continue; }\n'
                 '    if (*x == \'-\') hi = strtoul(x + 1, &x, 16);\n'
                 '    for (int i = 0; i < NNAT; i++) if (nat_addr[i] >= lo && nat_addr[i] < hi) hm_native_off[i] = v;\n'

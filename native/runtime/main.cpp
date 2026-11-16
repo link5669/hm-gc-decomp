@@ -220,6 +220,8 @@ static void dump_guest(int) {
     }
 }
 
+extern "C" __attribute__((weak)) void hm_native_init(void);   // [hybrid]
+
 int main(int argc, char **argv) {
     signal(SIGUSR1, dump_guest);
     if (const char *l = getenv("HM_LOG")) g_log_level = atoi(l);
@@ -278,6 +280,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     dol_load(hm_dol, hm_dol_end - hm_dol);
+    if (hm_native_init) hm_native_init();   // [hybrid] private data of native decomp units (build_hybrid.py)
     boot_setup_lowmem();
     tb_set(0x100000ull);
     gpu_set_scale(scale);

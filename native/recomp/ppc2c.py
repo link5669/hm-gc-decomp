@@ -129,7 +129,10 @@ class Gen:
         if entry in self.hle:
             return 'void %s(CPU *RESTRICT c) { %s(c); }\n' % (name, self.hle[entry])
         after = self.after.get(entry)
-        if after:   # run the translated function, then a host hook
+        native = entry in self.native   # [hybrid] native (decomp C) implementation: hmt_X thunk; recompiled body kept as fn_X_rec
+        if native:
+            name = name + '_rec'
+        elif after:   # run the translated function, then a host hook
             name = name + '_orig'
         out = ['void %s(CPU *RESTRICT c) {' % name, '  u32 ea; (void)ea; u64 t64; (void)t64; double fa, fb; (void)fa; (void)fb;']
         if entry != f.start:
@@ -139,7 +142,11 @@ class Gen:
             if pc in labels: out.append('L_%08X:;' % pc)
             out.append('  ' + code if code else '')
         out.append('}')
-        if after:
+        if native:
+            # hm_native_off[]: runtime switch (HM_NATIVE_DENY, see build_hybrid.py's hm_native.c) back to the recompiled body
+            out.append('void %s(CPU *RESTRICT c) { if (__builtin_expect(hm_native_off[%d], 0)) %s(c); else hmt_%08X(c);%s }'
+                       % (self.fname(entry), self.native_idx[entry], name, entry, ' %s(c);' % after if after else ''))
+        elif after:
             out.append('void %s(CPU *RESTRICT c) { %s(c); %s(c); }' % (self.fname(entry), name, after))
         return '\n'.join(x for x in out if x != '') + '\n'
 
@@ -567,6 +574,7 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--per-file', type=int, default=120)
     ap.add_argument('--export', action='append', default=[], help='symbol names to export to rt_data_syms')
+    ap.add_argument('--native-list', help='[hybrid] hex addresses implemented natively (fn_X calls the thunk hmt_X)')
     ap.add_argument('--nocode', action='append', default=[], help='hex range lo-hi inside a text section that is data')
     a = ap.parse_args()
     dol = Dol(a.dol)
@@ -588,6 +596,11 @@ def main():
     g = Gen(dol, funcs, hle)
     g.save_ctx = save_ctx
     g.after = after
+    g.native = set()
+    if a.native_list:
+        nl = [int(l.split()[0], 16) for l in open(a.native_list) if l.strip()]
+        g.native_idx = {x: i for i, x in enumerate(nl)}
+        g.native = set(nl) - set(hle)
     g.scan_entries()
     os.makedirs(a.out, exist_ok=True)
     entries = g.all_entries()
@@ -595,6 +608,8 @@ def main():
         fp.write('#pragma once\n#include "ppc.h"\n')
         for e in entries: fp.write('void fn_%08X(CPU *RESTRICT c);\n' % e)
         for v in sorted(set(hle.values()) | set(after.values())): fp.write('void %s(CPU *RESTRICT c);\n' % v)
+        for e in sorted(g.native): fp.write('void hmt_%08X(CPU *RESTRICT c);\n' % e)
+        if g.native: fp.write('extern unsigned char hm_native_off[];\n')
     n = 0; nf = 0
     chunk = []
     def flush():

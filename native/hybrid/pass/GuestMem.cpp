@@ -54,7 +54,19 @@ struct GuestMem {
   std::map<std::string, Sym> gsyms, lsyms;
   std::map<std::string, std::vector<std::pair<uint32_t, Sym>>> lstatic;   // base name -> [(N, sym)] for "name$N"
   std::set<uint32_t> entries, denyAddr, noCall;
-  std::set<std::string> denyName, hostFns;
+  std::set<std::string> denyName, hostFns, asmFns;
+  bool isAsmFn(const std::string &n) {   // plain name, or the name inside an Itanium-mangled one
+    if (asmFns.count(n)) return true;
+    if (n.rfind("_Z", 0) != 0) return false;
+    for (size_t i = 2; i < n.size();) {
+      if (!isdigit((unsigned char)n[i])) { i++; continue; }
+      size_t j = i; while (j < n.size() && isdigit((unsigned char)n[j])) j++;
+      size_t len = std::stoul(n.substr(i, j - i));
+      if (j + len <= n.size() && asmFns.count(n.substr(j, len))) return true;
+      i = j + (j + len <= n.size() ? len : 0);
+    }
+    return false;
+  }
   std::map<const GlobalValue *, uint32_t> addr;     // guest address of globals / functions
   std::set<const GlobalVariable *> badGV;           // unresolvable (mutable, not in ELF)
   std::map<const GlobalVariable *, std::string> gvNote;
@@ -102,6 +114,7 @@ struct GuestMem {
       }
     }
     if (auto f = env("GM_NOCALL"); !f.empty()) { std::ifstream in(f); uint32_t a; while (in >> std::hex >> a) noCall.insert(a); }
+    if (auto f = env("GM_ASMFN"); !f.empty()) { std::ifstream in(f); std::string w; while (in >> w) asmFns.insert(w); }
     if (auto f = env("GM_HOST"); !f.empty()) { std::ifstream in(f); std::string w; while (in >> w) hostFns.insert(w); }
     if (auto v = env("GM_DATA"); !v.empty()) dataBase = (uint32_t)std::stoul(v, nullptr, 16);
     if (auto v = env("GM_UNIT"); !v.empty()) unit = v;
@@ -202,9 +215,11 @@ struct GuestMem {
       }
       if (G.isDeclaration()) { badGV.insert(&G); gvNote[&G] = "unresolved extern"; continue; }
       if (!G.isConstant() && !(G.hasGlobalUnnamedAddr() && G.getName().starts_with(".str"))) {
-        // mutable data that the recompiled code cannot see: only safe if never written by guest code;
-        // keep it private in the reserved region but report it.
+        // mutable data the recompiled code could not see (or a header tentative definition of data that lives
+        // elsewhere): functions using it stay recompiled.
         meta << "warn private-mutable " << n << " size " << sz << "\n";
+        badGV.insert(&G); gvNote[&G] = "private mutable data";
+        continue;
       }
       place.push_back(&G);
     }
@@ -949,6 +964,7 @@ struct GuestMem {
       auto ait = addr.find(&F);
       if (denyName.count(n) || (ait != addr.end() && denyAddr.count(ait->second))) { failReason[&F] = "denied"; continue; }
       if (F.isVarArg()) { failReason[&F] = "varargs definition"; continue; }
+      if (isAsmFn(n)) { failReason[&F] = "MWCC inline asm in source"; continue; }
       cands.push_back(&F);
     }
     gCPU = cast<GlobalVariable>(M.getOrInsertGlobal("g_cpu", ArrayType::get(I8, 0)));
@@ -1005,6 +1021,7 @@ struct GuestMem {
       char b[16]; snprintf(b, sizeof b, "%08X", dataBase);
       meta << "blob " << b << " " << blob.size() << " hm_blob_" << unit << "\n";
     }
+    if (!M.getModuleInlineAsm().empty()) { meta << "warn module-asm dropped\n"; M.setModuleInlineAsm(""); }
     M.setTargetTriple("x86_64-pc-linux-gnu");
     M.setDataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
     for (Function &F : M) {   // drop PPC target attributes

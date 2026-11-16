@@ -1,1 +1,2 @@
 # functions that stay recompiled: names, hex addresses or hex ranges lo-hi (one per line, # comments)
+80064820  # C80064820 ctor: empty helper bases (VH80064820_*) laid out at offset 0 by clang, `this - (676 - 672)` writes outside the object
