@@ -34,7 +34,8 @@ static void blank(PADStatus *st)
 u32 mp_pad_read(PADStatus *st)
 {
     u32 r = PADRead(st);
-    int was_naming = (mp.mode == MP_NAMING);
+    int was_naming = (mp.mode == MP_NAMING), was_blocked = was_naming || mp.menu_open, c;
+    static u16 s_guard[2];  /* buttons held when the name entry / debug menu closed: hidden until released */
     mp.frame++;
     track(&mp.in[0], &st[0]);
     track(&mp.in[1], &st[1]);
@@ -47,6 +48,15 @@ u32 mp_pad_read(PADStatus *st)
             mp.in[0].pressed = mp.in[1].pressed = 0;
         }
     }
+    if (was_blocked && mp.mode != MP_NAMING && !mp.menu_open) {
+        s_guard[0] = mp.in[0].held;
+        s_guard[1] = mp.in[1].held;
+    }
+    for (c = 0; c < 2; c++)
+        if (st[c].err == PAD_ERR_NONE) {
+            s_guard[c] &= st[c].button;
+            st[c].button &= ~s_guard[c];
+        }
     /* The game must not see menu input while a player types a name, and port 2 never drives Zeke 1. */
     if ((was_naming || mp.mode == MP_NAMING || mp.menu_open) && st[0].err == PAD_ERR_NONE)
         blank(&st[0]);

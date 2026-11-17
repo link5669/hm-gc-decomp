@@ -25,6 +25,7 @@ typedef struct MpState {
     u8 join_pending;    /* player 2 pressed START in a menu: start naming when gameplay begins */
     u8 want_spawn;
     u8 p2_ai;           /* player 2 is computer-controlled (debug menu) */
+    u8 auto_split;      /* debug menu: one shared screen while both players are on it (default: always split) */
     u8 menu_open;       /* debug menu is open (game paused) */
     u8 p2_rejoin;       /* player 2 (out of lives) pressed START */      /* player 2 asked to spawn (latched until the next player update) */
     u8 debug_split;

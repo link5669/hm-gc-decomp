@@ -84,12 +84,20 @@ static u8 *nearest_hider(const f32 *from, const f32 *p1, f32 maxd, f32 *pos)
 
 void mp_ai_reset(void) { s_nvisited = 0; }
 
-/* world direction (x, y on the ground; Z-up) -> stick, relative to the game camera (o76: right +0x20, fwd +0x14) */
+/* world direction (x, y on the ground; Z-up) -> stick, relative to the camera player 2 moves by:
+   his own (split screen) or the game camera (o76: right +0x20, fwd +0x14) */
 static void dir_to_stick(f32 dx, f32 dy, f32 *sx, f32 *sy)
 {
     u8 *gc = PTR(*(void **)0x8035B308, 0x4c);
     f32 rx = 1.0f, ry = 0.0f, fx = 0.0f, fy = 1.0f, a, b, m;
-    if (gc) {
+    f32 eye[3], fwd[3], side[3], up[3];
+    extern int mp_cam2_basis(f32 *eye, f32 *fwd, f32 *side, f32 *up);
+    if (mp_cam2_basis(eye, fwd, side, up)) {
+        /* player 2's own camera (split screen): his stick is relative to it */
+        rx = side[0]; ry = side[1];
+        /* forward on the ground = side rotated a quarter turn */
+        fx = -side[1]; fy = side[0];
+    } else if (gc) {
         rx = F32(gc, 0x20); ry = F32(gc, 0x24);
         fx = F32(gc, 0x14); fy = F32(gc, 0x18);
     }
@@ -150,6 +158,11 @@ void mp_ai_fill(u8 *in)
             sx *= 0.6f;
             sy *= 0.6f;
         }
+    }
+    {
+        int k;
+        for (k = 0x08; k < 0x54; k += 4)  /* nothing left held from the human player */
+            *(u32 *)(in + k) = 0;
     }
     *(f32 *)(in + 0x08) = sy;
     *(f32 *)(in + 0x0c) = sx;

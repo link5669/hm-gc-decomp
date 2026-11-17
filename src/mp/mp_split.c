@@ -40,7 +40,7 @@ extern u8 lbl_803286D0[];                                     /* transform op ta
 static Rect s_pane[2] = {{0, 0, 320, 480, 0.0f, 1.0f}, {320, 0, 640, 480, 0.0f, 1.0f}};
 static int s_pane_idx = -1, s_inworld;
 void *mp_main_cam;  /* camera of the current Render pass (Game+0x28); only its world pass is captured */
-static void *s_cam2, *s_camA;  /* split-screen cameras for the right / left pane */
+static void *s_cam2;  /* player 2's camera (right pane) */
 
 #define F32(p, o) (*(f32 *)((u8 *)(p) + (o)))
 #define PTR(p, o) (*(void **)((u8 *)(p) + (o)))
@@ -120,36 +120,30 @@ void mp_hook_hud(void *a, void *gx)
 void mp_hook_menu(void *a, void *gx) { if (s_pane_idx != 0) fn_801C3050(a, gx); }
 void mp_hook_fade(void *a, void *gx) { if (s_pane_idx != 0) fn_80039F78(a, gx); }
 
-static void set_aspect(void *cam, f32 aspect)
-{
-    fn_8012962C(cam, F32(cam, 0x34), aspect, F32(cam, 0x4c), F32(cam, 0x50));
-}
-
-/* Renders the frame split in two. cam2's pose is computed by the caller via eye/at. */
-int mp_split_render(void *game, void *gx, const f32 *eye1, const f32 *at1, const f32 *eye2, const f32 *at2)
+/* Renders the frame split in two: the left pane is the game's own camera (player 1 keeps the camera the game
+   gives him, cutscenes included), the right pane is player 2's camera (eye2/at2, see cam2_update). */
+int mp_split_render(void *game, void *gx, const f32 *eye2, const f32 *at2)
 {
     void *cam1 = PTR(game, 0x28);
     f32 up[3] = {0.0f, 0.0f, -1.0f};  /* the world is Z-up; the look-at helper wants the negated up axis */
-    f32 fov;
+    f32 fov1, aspect1, fov;
 
     if (!cam1)
         return 0;
     if (!s_cam2)
         s_cam2 = make_cam2(game, cam1);
-    if (!s_camA)
-        s_camA = make_cam2(game, cam1);
-    if (!s_cam2 || !s_camA)
+    if (!s_cam2)
         return 0;
+    fov1 = F32(cam1, 0x34);
+    aspect1 = F32(cam1, 0x38);
     /* half-width panes: a slightly wider vertical view keeps more of the room in sight */
-    fov = F32(cam1, 0x34) * 1.15f;
-    fn_8012962C(s_camA, fov, 320.0f / 448.0f, F32(cam1, 0x4c), F32(cam1, 0x50));
-    fn_8012962C(s_cam2, fov, 320.0f / 448.0f, F32(cam1, 0x4c), F32(cam1, 0x50));
-    fn_80129710(s_camA, eye1, at1, up);
+    fov = fov1 * 1.15f;
+    fn_8012962C(s_cam2, fov, aspect1 * 0.5f, F32(cam1, 0x4c), F32(cam1, 0x50));
     fn_80129710(s_cam2, eye2, at2, up);
+    fn_8012962C(cam1, fov, aspect1 * 0.5f, F32(cam1, 0x4c), F32(cam1, 0x50));
 
-    PTR(game, 0x28) = s_camA;
     s_pane_idx = 0;
-    mp_main_cam = s_camA;
+    mp_main_cam = cam1;
     fn_800326D0(game, gx);
     PTR(game, 0x28) = s_cam2;
     s_pane_idx = 1;
@@ -159,14 +153,15 @@ int mp_split_render(void *game, void *gx, const f32 *eye1, const f32 *at1, const
     PTR(game, 0x28) = cam1;
     s_pane_idx = -1;
     s_inworld = 0;
+    fn_8012962C(cam1, fov1, aspect1, F32(cam1, 0x4c), F32(cam1, 0x50));
     return 1;
 }
 
 void *mp_split_cam2(void) { return s_cam2; }
 
-/* Split-screen policy: split as soon as either player is not visible in player 1's (full-screen) view;
-   merge again once both have been comfortably on screen for half a second. Camera 2 follows player 2 with the
-   same offset and direction camera 1 has from player 1. */
+/* Split-screen policy: in co-op the screen is always split, so each player has his own camera (player 1 the
+   game's, player 2 the orbit camera below). With mp.auto_split (debug menu) the old behaviour is back: one shared
+   screen (player 1's camera) while both players are on it, split when one leaves it. */
 extern f32 mp_view[2][16], mp_proj[2][16];
 extern u8 mp_have_mtx[2];
 static int s_split_on, s_visible_frames, s_offscreen_frames;
@@ -350,16 +345,188 @@ static void search_axes(void)
 }
 #endif
 
+/* ---- player 2's own camera --------------------------------------------------------------------------
+   An orbit camera around player 2, independent of player 1's: the C stick of controller 2 turns it (left/right)
+   and raises/lowers it (up/down); while player 2 walks sideways it slowly swings behind him; releasing the
+   "camera behind me" button (the game's own recenter request) puts it behind him. It keeps the game's wall test.
+   Player 2's stick is interpreted relative to THIS camera (mp_cam2_basis, used around his update). */
+extern s8 mp_p2_cstick[2];
+static f32 s_h2[2] = {1.0f, 0.0f};  /* where camera 2 looks, on the ground plane (unit vector) */
+static f32 s_rise2 = 1.4f;          /* eye height above player 2's head */
+static f32 s_eye2[3], s_at2[3];     /* smoothed pose, as rendered */
+static f32 s_rec2[2];
+static int s_cam2_init, s_rec2_frames;
+static u32 s_cam2_frame;            /* render frame of the last update */
+
+static void turn2(f32 a)  /* rotate the heading by a small angle (counter-clockwise seen from above) */
+{
+    f32 x = s_h2[0] - s_h2[1] * a, y = s_h2[1] + s_h2[0] * a, l = sqrtf(x * x + y * y);
+    if (l > 0.001f) {
+        s_h2[0] = x / l;
+        s_h2[1] = y / l;
+    }
+}
+
+static f32 stick_axis(s8 v)
+{
+    f32 f = v / 90.0f;
+    if (f > -0.18f && f < 0.18f)
+        return 0.0f;
+    return f > 1.0f ? 1.0f : f < -1.0f ? -1.0f : f;
+}
+
+/* The game asked for "camera behind the player" during player 2's update: dir = his facing. */
+void mp_cam2_recenter(const f32 *dir)
+{
+    f32 l = sqrtf(dir[0] * dir[0] + dir[1] * dir[1]);
+    if (l < 0.01f)
+        return;
+    s_rec2[0] = dir[0] / l;
+    s_rec2[1] = dir[1] / l;
+    s_rec2_frames = 40;
+}
+
+/* Camera 2 as last rendered: eye and axes (fwd into the scene, side = right, up). 0 = no own camera right now
+   (screen not split): player 2 then moves relative to the shared camera. */
+int mp_cam2_basis(f32 *eye, f32 *fwd, f32 *side, f32 *up)
+{
+    f32 f[3], l, h;
+    int i;
+    /* (not "rendered in the last frames": after a pause his first update would steer by player 1's camera) */
+    if (!s_cam2_init || !s_split_on)
+        return 0;
+    for (i = 0; i < 3; i++)
+        f[i] = s_at2[i] - s_eye2[i];
+    l = sqrtf(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+    h = sqrtf(f[0] * f[0] + f[1] * f[1]);
+    if (l < 0.01f || h < 0.15f * l) {
+        /* looking (almost) straight down: steer by the heading */
+        f[0] = s_h2[0]; f[1] = s_h2[1]; f[2] = l < 0.01f ? 0.0f : f[2] / l;
+        h = 1.0f;
+    } else {
+        for (i = 0; i < 3; i++)
+            f[i] /= l;
+        h /= l;
+    }
+    for (i = 0; i < 3; i++) {
+        eye[i] = s_eye2[i];
+        fwd[i] = f[i];
+    }
+    side[0] = f[1] / h; side[1] = -f[0] / h; side[2] = 0.0f;  /* fwd x world up */
+    up[0] = side[1] * f[2];
+    up[1] = -side[0] * f[2];
+    up[2] = side[0] * f[1] - side[1] * f[0];
+    return 1;
+}
+
+/* Wanted eye for a chase camera looking along (hx, hy) at head: behind the player, in front of walls; if a wall
+   is close behind him, rise to an over-the-shoulder / overhead view rather than a close-up. */
+static void chase_eye(const f32 *head, f32 hx, f32 hy, f32 rise, f32 *eye)
+{
+    f32 best = -1.0f, cand[3][3], bestv[3], d[3];
+    int c, i;
+    d[0] = -hx; d[1] = -hy; d[2] = 0.0f;
+    for (i = 0; i < 3; i++) {
+        bestv[i] = head[i];
+        cand[0][i] = d[i] * 3.6f;
+        cand[1][i] = d[i] * 2.4f;
+        cand[2][i] = d[i] * 0.9f;
+    }
+    cand[0][2] = rise;
+    cand[1][2] = rise > 2.6f ? rise : 2.6f;
+    cand[2][2] = 3.4f;
+    for (c = 0; c < 3; c++) {
+        f32 cl = sqrtf(cand[c][0] * cand[c][0] + cand[c][1] * cand[c][1] + cand[c][2] * cand[c][2]), dn[3], got;
+        for (i = 0; i < 3; i++)
+            dn[i] = cand[c][i] / cl;
+        got = wall_clip(head, dn, cl);
+        if (got > best + 0.25f) {  /* prefer earlier (lower) candidates unless clearly better */
+            best = got;
+            for (i = 0; i < 3; i++)
+                bestv[i] = head[i] + dn[i] * got;
+        }
+        if (got >= cl - 0.01f && got >= 2.5f)
+            break;  /* unobstructed and far enough */
+    }
+    if (best < 1.6f) {
+        /* boxed in: look straight down on the player from above */
+        f32 up[3] = {0.0f, 0.0f, 1.0f};
+        f32 got = wall_clip(head, up, 4.0f);
+        for (i = 0; i < 3; i++)
+            bestv[i] = head[i] + d[i] * 0.4f;
+        bestv[2] = head[2] + (got > 1.2f ? got : 1.2f);
+    }
+    for (i = 0; i < 3; i++)
+        eye[i] = bestv[i];
+}
+
+static void cam2_update(const f32 *p2)
+{
+    f32 head[3], eye[3], cx = 0.0f, cy = 0.0f, ke, ka;
+    int i, fresh = !s_cam2_init || mp_render_frame - s_cam2_frame > 2;
+    head[0] = p2[0]; head[1] = p2[1]; head[2] = p2[2] + 1.3f;
+    if (!s_cam2_init) {
+        /* start looking the way player 1's camera looks (GameCam actor: forward at +0x14) */
+        u8 *gc = *(u8 **)((u8 *)*(void **)0x8035B308 + 0x4c);
+        if (gc) {
+            f32 x = *(f32 *)(gc + 0x14), y = *(f32 *)(gc + 0x18), l = sqrtf(x * x + y * y);
+            if (l > 0.1f) {
+                s_h2[0] = x / l;
+                s_h2[1] = y / l;
+            }
+        }
+        s_rise2 = 1.4f;
+        s_rec2_frames = 0;
+        s_cam2_init = 1;
+    }
+    if (mp.mode == MP_COOP && !mp.menu_open && !mp.p2_ai) {
+        cx = stick_axis(mp_p2_cstick[0]);
+        cy = stick_axis(mp_p2_cstick[1]);
+    }
+    if (cx != 0.0f) {
+        turn2(-cx * 0.05f);  /* C stick right: look right */
+        s_rec2_frames = 0;
+    }
+    s_rise2 += cy * 0.05f;   /* C stick up: camera higher */
+    if (s_rise2 < 0.2f) s_rise2 = 0.2f;
+    if (s_rise2 > 3.2f) s_rise2 = 3.2f;
+    if (s_rec2_frames > 0) {
+        /* swing behind the player */
+        f32 x = s_h2[0] + (s_rec2[0] - s_h2[0]) * 0.18f, y = s_h2[1] + (s_rec2[1] - s_h2[1]) * 0.18f, l = sqrtf(x * x + y * y);
+        s_rec2_frames--;
+        if (l < 0.05f)
+            turn2(0.3f);  /* exactly opposite: start turning */
+        else
+            s_h2[0] = x / l, s_h2[1] = y / l;
+    } else if (cx == 0.0f && mp_render_frame - mp_player_seen[1] <= 2) {
+        /* walking sideways: drift behind the walking direction (not while walking towards the camera, so
+           "stick down" keeps meaning "towards me") */
+        f32 vx = *(f32 *)((u8 *)mp_player[1] + 0x118), vy = *(f32 *)((u8 *)mp_player[1] + 0x11c);
+        f32 sp = sqrtf(vx * vx + vy * vy);
+        if (sp > 0.5f) {
+            f32 lat = (vx * s_h2[1] - vy * s_h2[0]) / sp, along = (vx * s_h2[0] + vy * s_h2[1]) / sp;
+            if (along > -0.3f)
+                turn2(-lat * 0.018f);
+        }
+    }
+    chase_eye(head, s_h2[0], s_h2[1], s_rise2, eye);
+    ke = fresh ? 1.0f : 0.22f;
+    ka = fresh ? 1.0f : 0.35f;
+    for (i = 0; i < 3; i++) {
+        s_eye2[i] += (eye[i] - s_eye2[i]) * ke;
+        s_at2[i] += (head[i] - s_at2[i]) * ka;
+    }
+    s_cam2_frame = mp_render_frame;
+}
+
 int mp_coop_render(void *game, void *gx)
 {
-    f32 p1[3], p2[3], eye[3], fwd[3], eye2[3], at2[3];
-    const f32 *v = mp_view[0];
-    int i;
+    f32 p1[3], p2[3];
 
     if (!mp_player_pos(mp_player[0], p1) || !mp_player_pos(mp_player[1], p2) || !mp_have_mtx[0])
         return 0;
     game_view(game);
-    if (mp.debug_split) {
+    if (mp.debug_split || !mp.auto_split) {
         s_split_on = 1;
     } else if (!s_split_on) {
         /* split once a player has been off the shared screen for a third of a second */
@@ -385,108 +552,16 @@ int mp_coop_render(void *game, void *gx)
         mp_cam_metrics(p1, p2, 0, 0, 0);
         return 0;
     }
-    {
-        /* Each pane: start from that player's game camera position (the game's own follow camera with its
-           collision handling), keep a minimum distance and height, always look at the player's head, smooth. */
-        static f32 se[2][3], sa[2][3];
-        static u32 last_frame;
-        f32 eyes[2][3], ats[2][3];
-        void *gc[2];
-        const f32 *pp[2];
-        int k;
-        gc[0] = *(void **)((u8 *)*(void **)0x8035B308 + 0x4c);  /* player 1's GameCam (o76) */
-        gc[1] = 0;
-        pp[0] = p1;
-        pp[1] = p2;
-        for (k = 0; k < 2; k++) {
-            f32 head[3], d[3], len;
-            head[0] = pp[k][0]; head[1] = pp[k][1]; head[2] = pp[k][2] + 1.3f;
-            {
-                /* chase camera: behind the player's walking direction (kept while standing still) */
-                static f32 hd[2][2] = {{1.0f, 0.0f}, {1.0f, 0.0f}};
-                f32 vx = *(f32 *)((u8 *)mp_player[k] + 0x118), vy = *(f32 *)((u8 *)mp_player[k] + 0x11c);
-                f32 sp = sqrtf(vx * vx + vy * vy);
-                if (sp > 0.5f) {
-                    hd[k][0] += (vx / sp - hd[k][0]) * 0.06f;
-                    hd[k][1] += (vy / sp - hd[k][1]) * 0.06f;
-                    sp = sqrtf(hd[k][0] * hd[k][0] + hd[k][1] * hd[k][1]);
-                    if (sp > 0.01f) {
-                        hd[k][0] /= sp;
-                        hd[k][1] /= sp;
-                    }
-                }
-                eyes[k][0] = head[0] - hd[k][0] * 3.6f;
-                eyes[k][1] = head[1] - hd[k][1] * 3.6f;
-                eyes[k][2] = head[2] + 1.4f;
-            }
-            {
-                /* chase camera: keep 3.2..7 m, a bit above the head, and in front of walls; if a wall is close
-                   behind the player, rise to an over-the-shoulder / overhead view rather than a close-up */
-                f32 best = -1.0f, cand[3][3], bestv[3];
-                int c;
-                for (i = 0; i < 3; i++)
-                    d[i] = eyes[k][i] - head[i];
-                len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-                if (len < 0.01f) {
-                    d[0] = 1.0f; d[1] = 0.0f; d[2] = 0.0f; len = 1.0f;
-                }
-                for (i = 0; i < 3; i++)
-                    d[i] /= len;
-                /* candidates: behind, behind+higher, nearly overhead */
-                for (i = 0; i < 3; i++) {
-                    cand[0][i] = d[i] * 3.6f;
-                    cand[1][i] = d[i] * 2.4f;
-                    cand[2][i] = d[i] * 0.9f;
-                }
-                cand[0][2] = 1.4f; cand[1][2] = 2.6f; cand[2][2] = 3.4f;
-                for (c = 0; c < 3; c++) {
-                    f32 cl = sqrtf(cand[c][0] * cand[c][0] + cand[c][1] * cand[c][1] + cand[c][2] * cand[c][2]), dn[3], got;
-                    for (i = 0; i < 3; i++)
-                        dn[i] = cand[c][i] / cl;
-                    got = wall_clip(head, dn, cl);
-                    if (got > best + 0.25f) {  /* prefer earlier (lower) candidates unless clearly better */
-                        best = got;
-                        for (i = 0; i < 3; i++)
-                            bestv[i] = head[i] + dn[i] * got;
-                    }
-                    if (got >= cl - 0.01f && got >= 2.5f)
-                        break;  /* unobstructed and far enough */
-                }
-                if (best < 1.6f) {
-                    /* boxed in: look straight down on the player from above */
-                    f32 up[3] = {0.0f, 0.0f, 1.0f}, ov[3];
-                    f32 got = wall_clip(head, up, 4.0f);
-                    for (i = 0; i < 3; i++)
-                        ov[i] = head[i] + d[i] * 0.4f;
-                    ov[2] = head[2] + (got > 1.2f ? got : 1.2f);
-                    for (i = 0; i < 3; i++)
-                        bestv[i] = ov[i];
-                }
-                for (i = 0; i < 3; i++)
-                    eyes[k][i] = bestv[i];
-            }
-            for (i = 0; i < 3; i++)
-                ats[k][i] = head[i];
-        }
-        {
-            f32 ke = (mp_render_frame - last_frame > 2) ? 1.0f : 0.12f, ka = (ke < 1.0f) ? 0.25f : 1.0f;
-            for (k = 0; k < 2; k++)
-                for (i = 0; i < 3; i++) {
-                    se[k][i] += (eyes[k][i] - se[k][i]) * ke;
-                    sa[k][i] += (ats[k][i] - sa[k][i]) * ka;
-                }
-            last_frame = mp_render_frame;
-        }
-        mp_cam_metrics(p1, p2, se[1], sa[1], 1);
-        return mp_split_render(game, gx, se[0], sa[0], se[1], sa[1]);
-    }
+    cam2_update(p2);
+    mp_cam_metrics(p1, p2, s_eye2, s_at2, 1);
+    return mp_split_render(game, gx, s_eye2, s_at2);
 }
 
 /* A new level frees the old camera objects: make camera 2 again on the next split. */
 void mp_split_reset(void)
 {
     s_cam2 = 0;
-    s_camA = 0;
+    s_cam2_init = 0;
     s_split_on = 0;
     mp_have_mtx[0] = mp_have_mtx[1] = 0;
 }
