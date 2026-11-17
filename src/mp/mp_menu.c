@@ -1,5 +1,6 @@
 /* Multiplayer mod: debug menu (Z + START on either controller, in gameplay).
    - PLAYER 2: AI / HUMAN
+   - SCREEN: always split (each player his own camera) / split only when the players are apart
    - warp to any area: loads the level and sets the progress (spirits, lantern) for that point of the game */
 #include <dolphin/pad.h>
 #include "mp.h"
@@ -56,7 +57,7 @@ void mp_menu_update(void)
         }
         return;
     }
-    items = 1 + s_nlevels;
+    items = 2 + s_nlevels;
     {
         MpInput *in = &mp.in[s_owner];
         if (in->pressed & PAD_BUTTON_UP)
@@ -72,12 +73,14 @@ void mp_menu_update(void)
         } else if (in->pressed & PAD_BUTTON_A) {
             if (s_sel == 0) {
                 mp.p2_ai ^= 1;
+            } else if (s_sel == 1) {
+                mp.auto_split ^= 1;
             } else {
                 char key[8];
-                mp_area_key(s_sel - 1, key);
+                mp_area_key(s_sel - 2, key);
                 mp.menu_open = 0;
                 OSReport("[mp] debug menu: warp to '%.8s'\n", key);
-                mp_apply_area_progress(s_sel - 1);
+                mp_apply_area_progress(s_sel - 2);
                 mp_load_level_key(key);
             }
         }
@@ -94,7 +97,7 @@ void mp_menu_draw(void)
     mp_draw_box(x, y, 340.0f, 360.0f, 0x101028E8);
     mp_draw_box(x, y, 340.0f, 3.0f, 0xFFE070FF);
     mp_draw_text_centered(320.0f, y + 10.0f, "DEBUG MENU", 2.0f, 0xFFE070FF);
-    for (i = 0; i < VISIBLE && s_top + i < 1 + s_nlevels; i++) {
+    for (i = 0; i < VISIBLE && s_top + i < 2 + s_nlevels; i++) {
         int it = s_top + i;
         f32 ly = y + 44.0f + i * 26.0f;
         u32 col = it == s_sel ? 0x000000FF : 0xE8E8F0FF;
@@ -102,8 +105,10 @@ void mp_menu_draw(void)
             mp_draw_box(x + 10.0f, ly - 4.0f, 320.0f, 24.0f, 0x60C0FFFF);
         if (it == 0) {
             mp_draw_text(x + 20.0f, ly, mp.p2_ai ? "PLAYER 2: AI" : "PLAYER 2: HUMAN", 1.5f, col);
+        } else if (it == 1) {
+            mp_draw_text(x + 20.0f, ly, mp.auto_split ? "SCREEN: SPLIT WHEN APART" : "SCREEN: ALWAYS SPLIT", 1.5f, col);
         } else {
-            const char *nm = mp_area_label(it - 1);
+            const char *nm = mp_area_label(it - 2);
             char line[40];
             int n = 0, k;
             const char *w = "WARP: ";

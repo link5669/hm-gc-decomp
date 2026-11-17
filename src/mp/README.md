@@ -1,6 +1,7 @@
 # Multiplayer mod (branch `multiplayer`)
 
-Build: `tools/mp/build.sh` -> `build/GHYE6S/main_mp.dol` (put it in an extracted disc's `sys/main.dol`).
+Build: `tools/mp/build.sh` -> `build/GHYE6S/main_mp.dol` (put it in an extracted disc's `sys/main.dol`). The script
+uses the decomp.wtf toolchains when present, else the tools plain `configure.py` downloads into `build/`.
 
 How it works (no game code or data moves):
 - `config/GHYE6S/ldscript_mp.tpl` reserves 0x30000 bytes between the game's last data section and the stack
@@ -17,10 +18,21 @@ How it works (no game code or data moves):
   buttons as player 1). Both players act separately but share the ghosts-needed / ghosts-found totals.
 - Each player has their own health and lives. Player 2's bar and lives are at the bottom right. When knocked out,
   player 2 loses a life and comes back next to player 1 (no game over). Out of lives: START rejoins with 3 lives.
-- Names are shown above each player's head. If either player has been off the shared screen for a third of a second,
-  the screen splits vertically (player 1 left, player 2 right). Each half has a smoothed chase camera that always looks
-  at its player, keeps 2.5-4 m away and uses the game's wall test (it rises above the player instead of going through
-  walls). The screen merges again once both players have been well inside the shared view for 0.75 s.
+- Names are shown above each player's head. In co-op the screen is always split vertically (player 1 left, player 2
+  right) and each player has his own camera:
+  - player 1 keeps the game's camera, exactly as in single player (C stick, lock-on, cutscenes);
+  - player 2 has an orbit camera of his own: the C stick of controller 2 turns it (left/right) and raises or lowers it
+    (up/down), it drifts behind him while he walks sideways, the game's "camera behind me" request puts it behind him,
+    and it uses the game's wall test (it rises above the player instead of going through walls).
+  Player 2's stick is relative to player 2's camera: the camera globals the Player update reads (written by player 1's
+  camera) are swapped for player 2's camera around his update, so turning one camera never changes where the other
+  player walks. The debug menu (Z + START) has "SCREEN": always split (default) or the older shared screen that only
+  splits when a player leaves it (player 2 then moves relative to the shared camera while it is shared).
+- Cutscenes (the game camera in scripted mode) belong to player 1 and play in his pane. Player 2 keeps playing in his
+  own pane: messages sent to his Player actor from outside his own update are dropped while a cutscene runs (so the
+  script does not freeze him or walk him to player 1's mark), and he does not fire walk-in triggers / loading zones
+  until it is over. If he is ever left without control while player 1 has it, control comes back after 3 s.
+  `MP_CFLAGS=-DMP_CUTSCENE_PAUSE_P2` builds the previous behaviour (player 2 hidden and paused during cutscenes).
 - Rooms: when either player walks into a loading zone (player 2's body is registered in the level's collision pass,
   and walk-in triggers accept both players), both go: player 2 is placed next to player 1 in the new room (on a free
   spot, checked with the game's wall test) and keeps their lives and health. Game over / quitting to the title ends

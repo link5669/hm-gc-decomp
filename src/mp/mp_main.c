@@ -27,7 +27,8 @@ void mp_game_render(void *game, void *gx)
     mp_main_cam = *(void **)((u8 *)game + 0x28);
     {
         extern int mp_in_title;
-        if (mp.mode == MP_COOP && mp_player[1] && !mp_in_title && mp_render_frame - mp_player_seen[1] <= 2)
+        /* player 2 updated as recently as player 1 (both stand still while the game is paused: stay split) */
+        if (mp.mode == MP_COOP && mp_player[1] && !mp_in_title && (s32)(mp_player_seen[0] - mp_player_seen[1]) <= 2)
             split = mp_coop_render(game, gx);
     }
     if (!split)
@@ -71,6 +72,24 @@ void mp_player_update(void *player, f32 dt)
 {
     if (player == mp_player[1])  /* player 2 is updated only by mp_update_p2 (with its own input) */
         return;
+    {
+        /* A level change was requested: until the old level is unloaded (next frame) the game still updates the
+           old player 2, who must not run as "the player" with player 1's input and globals. He is told from a new
+           Player in the same pool slot by the name the mod gave him; the count is a safety limit. */
+        extern void *mp_p2_old;
+        static const char n2[6] = "zeke2";
+        static int skipped;
+        if (mp_p2_old && player == mp_p2_old && player != mp_player[0]) {
+            int k;
+            for (k = 0; k < 6 && ((char *)player + 0x8c)[k] == n2[k]; k++)
+                ;
+            if (k == 6 && ++skipped <= 30)
+                return;
+            mp_p2_old = 0;
+        }
+        if (!mp_p2_old)
+            skipped = 0;
+    }
     if (player != mp_player[0]) {
         mp_player[0] = player;     /* new level: the old player 2 died with the old pool */
         mp_player[1] = 0;
@@ -102,8 +121,8 @@ void mp_player_update(void *player, f32 dt)
     if (mp.mode == MP_COOP && !mp_player[1]) {
         if (!mp_in_gameplay())
             s_p0_frames = 0;
-        else if (++s_p0_frames > 90)
-            mp_spawn_p2();
+        else if (++s_p0_frames > 90 && !mp_spawn_p2())
+            s_p0_frames = -600;  /* failed (e.g. no free Player in this level's pool): try again in 10 s, not every frame */
     } else {
         s_p0_frames = 0;
     }

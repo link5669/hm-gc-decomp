@@ -15,6 +15,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 TC = os.path.expanduser("~/.local/share/decompnet/toolchains")
 BU = f"{TC}/gc-wii-binutils/powerpc-eabi-"
 MWCC = [f"{TC}/wibo/wibo", f"{TC}/mwcc/GC/2.6/mwcceppc.exe"]
+if not os.path.isdir(TC):  # tools downloaded by plain configure.py (see README.md)
+    BU = os.path.join(ROOT, "build/binutils/powerpc-eabi-")
+    MWCC = [os.path.join(ROOT, "build/tools/wibo"), os.path.join(ROOT, "build/compilers/GC/2.6/mwcceppc.exe")]
 CFLAGS = ("-nodefaults -proc gekko -align powerpc -enum int -fp hardware -Cpp_exceptions off "
           "-O4,p -inline auto -use_lmw_stmw on -nosyspath -RTTI off -str reuse -sdata 0 -sdata2 0 -lang=c -maxerrors 3 "
           "-i src/mp -i tools/rea/ref/dolsdk2004/include -i tools/rea/ref/dolsdk2004/include/libc").split()

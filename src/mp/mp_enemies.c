@@ -28,6 +28,12 @@ static const u32 s_enemy_vt[] = {
     0x802cd4fc /* BWorm */, 0x802ce4f4 /* BSSpider */, 0x802cef94 /* BMusKnit */, 0x802d0398 /* BAuxGh */,
     0x802d10f0 /* BMoth */, 0x802d1634 /* BBat */, 0x802d3988 /* BMaggot */, 0x802d5ea8 /* BZombArm */,
 };
+/* allocation size of each behaviour above (the `new` in its factory): the retarget scan must stay inside it */
+static const u16 s_enemy_size[] = {
+    0x134, 0x160, 0x150, 0x138, 0x180, 0x27c, 0x1cc, 0x12c, 0x184, 0x178,
+    0x128, 0x17c, 0x1e0, 0x134, 0x1a8, 0x184, 0x144, 0x184, 0x138, 0x140,
+};
+#define ENEMY_MIN_SIZE 0x128
 /* behaviours that keep their own copy of the target (set once from o72): offset in the behaviour */
 static int cached_target_ofs(u32 vt)
 {
@@ -56,10 +62,14 @@ static int is_enemy(u8 *o)
 static void retarget(u8 *o, u8 *who, u8 *other)
 {
     u8 *beh = PTR(o, MP_BEHAVIOUR_OFS);
-    u32 i;
+    u32 i, vt, size = ENEMY_MIN_SIZE;
     if (((u32)beh & 0xFE000000) != 0x80000000)
         return;
-    for (i = 4; i < 0x200; i += 4)
+    vt = U32(beh, 0);
+    for (i = 0; i < sizeof(s_enemy_vt) / sizeof(s_enemy_vt[0]); i++)
+        if (vt == s_enemy_vt[i])
+            size = s_enemy_size[i];
+    for (i = 4; i + 4 <= size; i += 4)
         if (PTR(beh, i) == other)
             PTR(beh, i) = who;
 }
@@ -119,7 +129,8 @@ static void actor_loop(u8 *p, f32 dt)
 {
     u8 *it = PTR(p, 0x50), *p1 = PTR(p, 0x48), *p2 = mp_player[1], *o76 = PTR(p, 0x4c);
     f32 k = *(f32 *)(lbl_8035B488 + 20);
-    int p2_ok = p2 && mp_p2_lives >= 0 && F32(p2, 0x1ac) > 0.0f;
+    /* (not in co-op = controller 2 unplugged: he stands still and enemies leave him alone) */
+    int p2_ok = p2 && mp.mode == MP_COOP && mp_p2_lives >= 0 && F32(p2, 0x1ac) > 0.0f;
     if (!it)
         return;
     s_tick++;
@@ -156,6 +167,9 @@ static void actor_loop(u8 *p, f32 dt)
             tick(o, dt, k);
             PTR(p, 0x48) = p1;
         } else {
+            /* player 2 is down: enemies that were after him go back to player 1 */
+            if (p2 && !p2_ok && is_enemy(o))
+                retarget(o, p1, p2);
             tick(o, dt, k);
         }
     }
@@ -166,7 +180,7 @@ static void actor_loop(u8 *p, f32 dt)
 
 void mp_actor_update_coop(void *mgr, f32 dt)
 {
-    if (mp.mode == MP_COOP && mp_player[1])
+    if (mp_player[1])
         actor_loop((u8 *)mgr, dt);
     else
         fn_80228A48(mgr, dt);
@@ -253,6 +267,7 @@ void *mp_target_for(u8 *o)
 /* Animation events (e.g. a spider's bite frame) reach the owning actor from the world animation update, not from
    the actor's own update: fn_80222840 `actor->event(...)` (bctrl at 0x80222b24, r3 = actor). The call goes through
    this stub so "the player" is the enemy's target during the event. */
+int mp_in_anim_event;  /* an animation event is being delivered (never dropped by player 2's cutscene filter) */
 asm void mp_actor_event_call(void)
 {
     nofralloc
@@ -279,6 +294,11 @@ asm void mp_actor_event_call(void)
     lwz r31, 0x48(r12)
     stw r30, 0x48(r12)
 call:
+    lis r12, mp_in_anim_event@ha
+    addi r12, r12, mp_in_anim_event@l
+    lwz r0, 0(r12)
+    addi r0, r0, 1
+    stw r0, 0(r12)
     lwz r0, 32(r1)
     mtctr r0
     lwz r3, 8(r1)
@@ -288,6 +308,11 @@ call:
     lwz r7, 24(r1)
     lwz r8, 28(r1)
     bctrl
+    lis r12, mp_in_anim_event@ha
+    addi r12, r12, mp_in_anim_event@l
+    lwz r0, 0(r12)
+    subi r0, r0, 1
+    stw r0, 0(r12)
     cmpwi r30, 0
     beq done
     lis r12, 0x8036

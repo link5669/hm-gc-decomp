@@ -42,6 +42,7 @@ static void give_p2_camera(void *p0, void *p1);
 static void give_p2_nodes(void *p0, void *p1);
 void mp_teleport_p2_to_p1(void);
 void mp_split_reset(void);
+extern void *mp_p2_old;
 /* Runtime-cloned world nodes are not in the world's update list (fn_80192488), so their animation
    would never advance: tick them ourselves each frame. */
 void fn_80187EE0(void *node, f32 dt);
@@ -165,6 +166,7 @@ int mp_spawn_p2(void)
     PTR(mgr, 0x48) = saved48;
     PTR(PTR(p0, 0x9c), 0x3c) = saved_owner;
     mp_player[1] = p1;
+    mp_p2_old = 0;
     mp_player_seen[1] = mp_render_frame;
     spawn_statics_end(p0, p1);
     apply_carry(p1);
@@ -172,6 +174,10 @@ int mp_spawn_p2(void)
     s_place_p2 = 1;
     for (i = 0; i < 0x54; i++)
         s_p2_input[i] = INPUT_STRUCT()[i];
+    /* ...but not what player 1 is holding right now: axes (+0x08..+0x24) and buttons (+0x28..+0x50) start released
+       (the ones controller 2 never writes would stay held for good) */
+    for (i = 0x08; i < 0x54; i++)
+        s_p2_input[i] = 0;
     {
         u8 *pl1 = PTR(p0, 0xb8), *pl2 = PTR(p1, 0xb8);
         OSReport("[mp] anim link P1 b8 %p idx %d own %p | P2 b8 %p idx %d own %p | P2 b0 %d\n", pl1, pl1 ? U32(pl1, 8) : -1,
@@ -369,12 +375,12 @@ static void give_p2_nodes(void *p0, void *p1)
 
 /* Animation requests (fn_8022CC44) made while player 2 updates must go to player 2: its movement modules
    resolve their owner the single-player way and would animate player 1. */
-static int s_in_p2;
+int mp_in_p2_update;  /* player 2 is being updated (its own messages always pass the cutscene filter) */
 void fn_8022CC44(void *o, void *anim, f32 a, s32 u, s32 b, s32 c, s32 q, f32 d);
 void mp_anim_request(void *o, void *anim, f32 a, s32 u, s32 b, s32 c, s32 q, f32 d)
 {
     static int logged;
-    if (s_in_p2 && o == mp_player[0] && mp_player[1]) {
+    if (mp_in_p2_update && o == mp_player[0] && mp_player[1]) {
         if (logged < 3) {
             OSReport("[mp] anim request for P1 during P2 update -> P2 (anim %p)\n", anim);
             logged++;
@@ -421,6 +427,100 @@ void mp_teleport_p2_to_p1(void)
     *(f32 *)(p2 + 0x4c) = pos[2];
 }
 
+/* ---- cutscenes -----------------------------------------------------------------------------------
+   A cutscene (the game camera in scripted mode: the letterbox test of Game::Render) belongs to player 1 and
+   plays in his pane. Player 2 has his own camera and keeps playing. What used to pull him into the cutscene
+   are the messages the script sends to "the player" actors, so player 2 gets his own copy of the Player vtable
+   whose message entry (slot 33, +0x8c) drops messages from outside his own update while a cutscene runs.
+   He also does not fire walk-in triggers (loading zones) meanwhile, so a cutscene is never cut off by a level
+   change. Building with -DMP_CUTSCENE_PAUSE_P2 brings back the old behaviour (player 2 hidden and paused). */
+static int in_cutscene(void)
+{
+    u8 *cine = mp_game ? PTR(mp_game, 0xb70) : 0;
+    return cine && (*(s32 *)(cine + 0x284) != 0 || *(f32 *)(cine + 0x290) != 0.0f);
+}
+
+#define P2_VT_WORDS 0x80
+static u32 s_p2_vt[P2_VT_WORDS];
+static void *s_p2_vt_orig, *s_p2_vt_obj;
+void *mp_p2_msg_orig;  /* the real Player message handler */
+extern int mp_in_anim_event;  /* his own animation events use the same slot and always pass (mp_enemies.c) */
+int mp_p2_notrig;      /* player 2 does not fire walk-in triggers (cutscene running) */
+
+/* Player::message(self, name, ...) for player 2. Registers are passed through untouched (some handlers of
+   this slot are variadic). */
+asm void mp_p2_msg(void)
+{
+    nofralloc
+    lis r11, mp_player@ha
+    addi r11, r11, mp_player@l
+    lwz r11, 4(r11)
+    cmplw r3, r11
+    bne pass
+    lis r11, mp_in_p2_update@ha
+    addi r11, r11, mp_in_p2_update@l
+    lwz r11, 0(r11)
+    cmpwi r11, 0
+    bne pass
+    lis r11, mp_in_anim_event@ha
+    addi r11, r11, mp_in_anim_event@l
+    lwz r11, 0(r11)
+    cmpwi r11, 0
+    bne pass
+    lis r11, mp_game@ha
+    addi r11, r11, mp_game@l
+    lwz r11, 0(r11)
+    cmpwi r11, 0
+    beq pass
+    lwz r11, 0xb70(r11)
+    cmpwi r11, 0
+    beq pass
+    lwz r12, 0x284(r11)
+    cmpwi r12, 0
+    bne drop
+    lwz r12, 0x290(r11)
+    slwi. r12, r12, 1
+    beq pass
+drop:
+    li r3, 0
+    blr
+pass:
+    lis r11, mp_p2_msg_orig@ha
+    addi r11, r11, mp_p2_msg_orig@l
+    lwz r11, 0(r11)
+    mtctr r11
+    bctr
+}
+
+static void p2_filter_install(void *p1)
+{
+#ifndef MP_CUTSCENE_PAUSE_P2
+    u32 *vt = *(u32 **)p1;
+    int i;
+    if (vt == s_p2_vt)
+        return;
+    for (i = 0; i < P2_VT_WORDS; i++)
+        s_p2_vt[i] = vt[i];
+    mp_p2_msg_orig = (void *)vt[0x8c / 4];
+    s_p2_vt[0x8c / 4] = (u32)mp_p2_msg;
+    s_p2_vt_orig = vt;
+    s_p2_vt_obj = p1;
+    *(u32 **)p1 = s_p2_vt;
+#else
+    (void)p1;
+#endif
+}
+
+/* before the level (and its actor pool) goes away: the pool item gets its real vtable back */
+static void p2_filter_remove(void)
+{
+    if (s_p2_vt_obj && *(u32 **)s_p2_vt_obj == s_p2_vt)
+        *(void **)s_p2_vt_obj = s_p2_vt_orig;
+    s_p2_vt_obj = 0;
+    mp_p2_notrig = 0;
+}
+
+#ifdef MP_CUTSCENE_PAUSE_P2
 /* Cutscenes animate "the player" and would drag player 2 along into the same spot: player 2 is hidden and paused
    while the cinema letterbox is up, and comes back next to player 1 afterwards. */
 static int s_p2_hidden;
@@ -445,11 +545,19 @@ static void p2_set_visible(int show)
     }
 }
 
-static int in_cutscene(void)
-{
-    u8 *cine = mp_game ? PTR(mp_game, 0xb70) : 0;
-    return cine && (*(s32 *)(cine + 0x284) != 0 || *(f32 *)(cine + 0x290) != 0.0f);
-}
+#endif
+
+/* The camera globals the Player update (and what it calls) reads: movement is relative to them. They are written
+   by player 1's game camera; around player 2's update they hold player 2's camera instead. */
+extern f32 lbl_80357AE0[3];  /* "camera behind me" direction, written by the player */
+extern f32 lbl_80357AEC[3];  /* camera up */
+extern f32 lbl_80357AF8[3];  /* camera forward */
+extern f32 lbl_80357B04[3];  /* camera forward (end of the camera update) */
+extern f32 lbl_80357B10[3];  /* camera side (right) */
+extern f32 lbl_80357B1C[3];  /* camera eye */
+int mp_cam2_basis(f32 *eye, f32 *fwd, f32 *side, f32 *up);
+void mp_cam2_recenter(const f32 *dir);
+s8 mp_p2_cstick[2];          /* controller 2's C stick: turns player 2's camera (mp_split.c) */
 
 /* Called right after player 1's update each frame. */
 void mp_update_p2(f32 dt)
@@ -471,6 +579,7 @@ void mp_update_p2(f32 dt)
         last2 = h2;
     }
 #endif
+#ifdef MP_CUTSCENE_PAUSE_P2
     if (in_cutscene()) {
         if (!s_p2_hidden) {
             s_p2_hidden = 1;
@@ -484,6 +593,25 @@ void mp_update_p2(f32 dt)
         p2_set_visible(1);
         s_place_p2 = 1;
     }
+#else
+    p2_filter_install(mp_player[1]);
+    mp_p2_notrig = in_cutscene();
+    {
+        /* Safety net: player 2 left without control (a "controls off" that reached him without the matching
+           "controls on") while player 1 has control and no cutscene runs -> give it back after 3 s. */
+        static int stuck;
+        if (!mp_p2_notrig && U32(mp_player[0], 0x68c) && !U32(mp_player[1], 0x68c) &&
+            *(f32 *)((u8 *)mp_player[1] + 0x1ac) > 0.0f) {
+            if (++stuck > 180) {
+                stuck = 0;
+                U32(mp_player[1], 0x68c) = 1;
+                OSReport("[mp] player 2 had no control for 3 s: control restored\n");
+            }
+        } else {
+            stuck = 0;
+        }
+    }
+#endif
     if (*(f32 *)((u8 *)mp_player[1] + 0x1ac) <= 0.0f) {
         /* player 2 was knocked out: lose a life and come back at full health (no global death event).
            Out of lives: player 2 sits out (see HUD). */
@@ -502,6 +630,8 @@ void mp_update_p2(f32 dt)
             mp_player_seen[1] = mp_render_frame;
             return;
         }
+    } else {
+        mp.p2_rejoin = 0;  /* START while alive is not a rejoin request for later */
     }
     if (s_place_p2) {
         s_place_p2 = 0;
@@ -530,14 +660,49 @@ void mp_update_p2(f32 dt)
     }
     o72 = PTR(mgr, 0x48);
     /* o72 stays player 1 (swapping it routed player 2 input to player 1) */
-    s_in_p2 = 1;
-    fn_80074AF4(mp_player[1], dt);
-    s_in_p2 = 0;
+    {
+        /* player 2 moves relative to his own camera */
+        static f32 *const cg[6] = {lbl_80357AE0, lbl_80357AEC, lbl_80357AF8, lbl_80357B04, lbl_80357B10, lbl_80357B1C};
+        f32 keep[6][3], eye[3], fwd[3], side[3], up[3];
+        int k, own;
+        for (k = 0; k < 6; k++)
+            for (i = 0; i < 3; i++)
+                keep[k][i] = cg[k][i];
+        own = mp_cam2_basis(eye, fwd, side, up);
+        if (own)
+            for (i = 0; i < 3; i++) {
+                lbl_80357AEC[i] = up[i];
+                lbl_80357AF8[i] = fwd[i];
+                lbl_80357B04[i] = fwd[i];
+                lbl_80357B10[i] = side[i];
+                lbl_80357B1C[i] = eye[i];
+            }
+        mp_in_p2_update = 1;
+        fn_80074AF4(mp_player[1], dt);
+        mp_in_p2_update = 0;
+        if (*(u32 *)0x8035B6E8) {
+            /* he asked for "camera behind me" (direction left in lbl_80357AE0): that is his camera's job */
+            if (own) {
+                mp_cam2_recenter(lbl_80357AE0);
+                *(u32 *)0x8035B6E8 = 0;
+            } else {
+                /* shared screen: hand the request to player 1's camera */
+                s_p1_statics.b6e8 = 1;
+                *(u32 *)0x8035B6E8 = 0;
+                for (i = 0; i < 3; i++)
+                    keep[0][i] = lbl_80357AE0[i];
+            }
+        }
+        for (k = 0; k < 6; k++)
+            for (i = 0; i < 3; i++)
+                cg[k][i] = keep[k][i];
+    }
     PTR(mgr, 0x48) = o72;
     for (i = 0; i < 0x54; i++) {
         s_p2_input[i] = in[i];
         in[i] = saved[i];
     }
+    mp_in_anim_event++;  /* messages raised while his own nodes animate are his */
     for (i = 0; i < s_ncloned; i++)
         if (s_cloned[i] && PTR(s_cloned[i], 0x88) == 0)
             fn_80187EE0(s_cloned[i], dt);
@@ -547,6 +712,7 @@ void mp_update_p2(f32 dt)
         if (inst && PTR(inst, 0x88) == 0)
             fn_80187EE0(inst, dt);
     }
+    mp_in_anim_event--;
     if (0) {
         u8 *d2 = PTR(mp_player[1], 0xa0), *d1 = PTR(mp_player[0], 0xa0);
         OSReport("[mp] anim d2 %p 88 %p a8 %p b0 %p t %d | d1 88 %p b0 %p t %d | dt %d n %d\n", d2, PTR(d2, 0x88), PTR(d2, 0xa8),
@@ -630,8 +796,12 @@ void mp_fill_p2_input(const PADStatus *st)
 {
     u8 *s = s_p2_input;
     u16 b = st->button;
-    if (mp.p2_ai)
+    if (mp.p2_ai) {
+        mp_p2_cstick[0] = mp_p2_cstick[1] = 0;
         return;  /* player 2 is computer-controlled */
+    }
+    mp_p2_cstick[0] = st->substickX;
+    mp_p2_cstick[1] = st->substickY;
 #define AX(o) (*(f32 *)(s + (o)))
 #define BT(o) (*(u32 *)(s + (o)))
     AX(0x08) = st->stickY / 127.0f;   /* forward */
@@ -661,6 +831,7 @@ void mp_fill_p2_input(const PADStatus *st)
    its own world node in the collision pass), so whoever enters a loading zone takes both along. */
 void fn_800323C4(void *fw, void *name8);
 static s32 s_carry_lives = -1;
+void *mp_p2_old;  /* player 2 of the level being left (see mp_player_update) */
 int mp_in_title = 1;  /* current level is the title / front end (the game boots into it) */
 static f32 s_carry_hp = -1.0f;
 asm u32 mp_get_lr(void)
@@ -686,6 +857,8 @@ void mp_load_level(void *fw, void *name8)
             s_carry_hp = -1.0f;
         }
     }
+    p2_filter_remove();
+    mp_p2_old = mp_player[1];
     mp_player[1] = 0;  /* everything of player 2 is freed with the level */
     {
         extern void mp_enemies_reset(void);
@@ -735,10 +908,19 @@ asm void mp_cmp_is_player(void)
     beqlr
     stwu r1, -16(r1)
     stw r11, 8(r1)
+    lis r11, mp_p2_notrig@ha
+    addi r11, r11, mp_p2_notrig@l
+    lwz r11, 0(r11)
+    cmpwi r11, 0
+    bne no
     lis r11, mp_player@ha
     addi r11, r11, mp_player@l
     lwz r11, 4(r11)
     cmplw r4, r11
+    b out
+no:
+    cmplw r4, r0
+out:
     lwz r11, 8(r1)
     addi r1, r1, 16
     blr
